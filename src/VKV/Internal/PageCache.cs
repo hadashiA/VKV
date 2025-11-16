@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -49,9 +49,8 @@ public sealed class PageCache : IDisposable
             get => Buffer!.Memory;
         }
 
-        public int PrevIndex;
-        public int NextIndex;
         public int RefCount;
+        public long LastAccess;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Retain()
@@ -69,8 +68,6 @@ public sealed class PageCache : IDisposable
         }
     }
 
-    readonly Entry[] entries;
-    readonly Dictionary<PageNumber, int> table;
 
 #if NET9_0_OR_GREATER
     readonly Lock gate = new();
@@ -78,12 +75,10 @@ public sealed class PageCache : IDisposable
     readonly object gate = new();
 #endif
 
+    readonly ConcurrentDictionary<PageNumber, Entry> entries;
     readonly IStorage storage;
     readonly int capacity;
-    int head = -1;
-    int tail = -1;
-    int freeHead;
-    int count;
+    long globalClock;
 
     bool disposed;
 
@@ -92,19 +87,7 @@ public sealed class PageCache : IDisposable
         this.storage = storage;
         this.capacity = capacity;
 
-        entries = new Entry[capacity];
-        table = new Dictionary<PageNumber, int>(capacity);
-
-        for (var i = 0; i < capacity; i++)
-        {
-            var entry = new Entry
-            {
-                NextIndex = i + 1,
-                RefCount = 1,
-            };
-            entries[i] =  entry;
-        }
-        entries[capacity - 1].NextIndex = -1;
+        entries = new ConcurrentDictionary<PageNumber, Entry>();
     }
 
     public void Dispose()
@@ -115,35 +98,22 @@ public sealed class PageCache : IDisposable
 
             foreach (var t in entries)
             {
-                t.Release();
+                t.Value.Release();
             }
-
-            table.Clear();
+            entries.Clear();
             disposed = true;
         }
     }
 
     public bool TryGet(PageNumber pageNumber, out IPageEntry page)
     {
-        int index;
-        bool found;
-        lock (gate)
+        if (entries.TryGetValue(pageNumber, out var entry))
         {
-            found = table.TryGetValue(pageNumber, out index);
-            if (found)
-            {
-                MoveToFront(index);
-            }
-        }
-
-        if (found)
-        {
-            var entry = entries[index];
             entry.Retain();
+            entry.LastAccess = Interlocked.Increment(ref globalClock);
             page = entry;
             return true;
         }
-
         page = default!;
         return false;
     }
@@ -163,90 +133,69 @@ public sealed class PageCache : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void AddEntry(PageNumber pageNumber, IMemoryOwner<byte> buffer)
     {
-        lock (gate)
+        var stamp = Interlocked.Increment(ref globalClock);
+
+        entries.AddOrUpdate(
+            pageNumber,
+            static (key, arg) => new Entry
+            {
+                PageNumber = key,
+                Buffer = arg.buffer,
+                RefCount = 1,
+                LastAccess = arg.stamp
+            },
+            static (key, existing, arg) =>
+            {
+                // 既存を更新（古いバッファ解放して入れ替え）
+                existing.Release();
+                existing.Buffer = arg.buffer;
+                existing.RefCount = 1;
+                existing.LastAccess = arg.stamp;
+                existing.PageNumber = key;
+                return existing;
+            }, (buffer, stamp));
+
+        // キャパシティ超過したら追い出し
+        if (entries.Count > capacity)
         {
-            if (table.TryGetValue(pageNumber, out var existingIndex))
-            {
-                var existingEntry = entries[existingIndex];
-                existingEntry.Release();
-                existingEntry.Buffer = buffer;
-                MoveToFront(existingIndex);
-                return;
-            }
-
-            int newIndex;
-            if (count < entries.Length)
-            {
-                newIndex = freeHead;
-                freeHead = entries[freeHead].NextIndex;
-                count++;
-            }
-            else
-            {
-                // LRU から削除
-                newIndex = tail;
-                RemoveFromLRU(tail);
-                table.Remove(entries[newIndex].PageNumber);
-                entries[newIndex].Release();
-            }
-
-            var newEntry = entries[newIndex];
-            newEntry.PageNumber = pageNumber;
-            newEntry.Buffer = buffer;
-            newEntry.RefCount = 1;
-            table[pageNumber] = newIndex;
-            AddToFront(newIndex);
+            EvictOne();
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void MoveToFront(int index)
+    void EvictOne()
     {
-        if (head == index) return;
-        RemoveFromLRU(index);
-        AddToFront(index);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void RemoveFromLRU(int index)
-    {
-        var entry = entries[index];
-        if (entry.PrevIndex >= 0)
+        // 単純な実装：全テーブル走査して最古 LastAccess を探す
+        var minStamp = long.MaxValue;
+        PageNumber? victimKey = null;
+        foreach (var kv in entries)
         {
-            entries[entry.PrevIndex].NextIndex = entry.NextIndex;
+            var e = kv.Value;
+            // 参照中でない (RefCount == 0) を条件にするなら変更可
+            if (e.RefCount <= 0 && e.LastAccess < minStamp)
+            {
+                minStamp = e.LastAccess;
+                victimKey = kv.Key;
+            }
+        }
+
+        if (victimKey.HasValue)
+        {
+            if (entries.TryRemove(victimKey.Value, out var victim))
+            {
+                victim.Release();
+            }
         }
         else
         {
-            head = entry.NextIndex;
-        }
-
-        if (entry.NextIndex >= 0)
-        {
-            entries[entry.NextIndex].PrevIndex = entry.PrevIndex;
-        }
-        else
-        {
-            tail = entry.PrevIndex;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void AddToFront(int index)
-    {
-        var entry = entries[index];
-        entry.NextIndex = head;
-        entry.PrevIndex = -1;
-
-        if (head >= 0)
-        {
-            entries[head].PrevIndex = index;
-        }
-
-        head = index;
-
-        if (tail < 0)
-        {
-            tail = index;
+            // 全部参照中 or同等なら簡易版として一つ適当に Remove
+            foreach (var kv in entries)
+            {
+                if (entries.TryRemove(kv.Key, out var victim2))
+                {
+                    victim2.Release();
+                    break;
+                }
+            }
         }
     }
 }
