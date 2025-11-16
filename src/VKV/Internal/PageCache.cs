@@ -7,13 +7,6 @@ using System.Threading.Tasks;
 
 namespace VKV.Internal;
 
-public interface IPageEntry
-{
-    public PageNumber PageNumber { get; }
-    public ReadOnlyMemory<byte> Memory { get; }
-    public void Release();
-}
-
 public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
 {
     public IPageEntry Page => entry;
@@ -35,6 +28,13 @@ public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDis
     {
         entry.Release();
     }
+}
+
+public interface IPageEntry
+{
+    public PageNumber PageNumber { get; }
+    public ReadOnlyMemory<byte> Memory { get; }
+    public void Release();
 }
 
 public sealed class PageCache : IDisposable
@@ -62,7 +62,7 @@ public sealed class PageCache : IDisposable
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Release()
         {
-            if (Interlocked.CompareExchange(ref RefCount, 0, 1) == 1)
+            if (Interlocked.Decrement(ref RefCount) == 0)
             {
                 Buffer?.Dispose();
             }
@@ -106,7 +106,6 @@ public sealed class PageCache : IDisposable
         }
         entries[capacity - 1].NextIndex = -1;
     }
-
 
     public void Dispose()
     {
@@ -168,8 +167,9 @@ public sealed class PageCache : IDisposable
         {
             if (table.TryGetValue(pageNumber, out var existingIndex))
             {
-                entries[existingIndex].Release();
-                entries[existingIndex].Buffer = buffer;
+                var existingEntry = entries[existingIndex];
+                existingEntry.Release();
+                existingEntry.Buffer = buffer;
                 MoveToFront(existingIndex);
                 return;
             }
@@ -190,9 +190,10 @@ public sealed class PageCache : IDisposable
                 entries[newIndex].Release();
             }
 
-            entries[newIndex].PageNumber = pageNumber;
-            entries[newIndex].Buffer = buffer;
-            entries[newIndex].RefCount = 1;
+            var newEntry = entries[newIndex];
+            newEntry.PageNumber = pageNumber;
+            newEntry.Buffer = buffer;
+            newEntry.RefCount = 1;
             table[pageNumber] = newIndex;
             AddToFront(newIndex);
         }
