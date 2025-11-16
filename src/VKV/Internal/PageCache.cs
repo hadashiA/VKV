@@ -146,7 +146,6 @@ public sealed class PageCache : IDisposable
             },
             static (key, existing, arg) =>
             {
-                // 既存を更新（古いバッファ解放して入れ替え）
                 existing.Release();
                 existing.Buffer = arg.buffer;
                 existing.RefCount = 1;
@@ -155,7 +154,6 @@ public sealed class PageCache : IDisposable
                 return existing;
             }, (buffer, stamp));
 
-        // キャパシティ超過したら追い出し
         if (entries.Count > capacity)
         {
             EvictOne();
@@ -164,17 +162,14 @@ public sealed class PageCache : IDisposable
 
     void EvictOne()
     {
-        // 単純な実装：全テーブル走査して最古 LastAccess を探す
         var minStamp = long.MaxValue;
         PageNumber? victimKey = null;
-        foreach (var kv in entries)
+        foreach (var (key, e) in entries)
         {
-            var e = kv.Value;
-            // 参照中でない (RefCount == 0) を条件にするなら変更可
             if (e.RefCount <= 0 && e.LastAccess < minStamp)
             {
                 minStamp = e.LastAccess;
-                victimKey = kv.Key;
+                victimKey = key;
             }
         }
 
@@ -187,7 +182,6 @@ public sealed class PageCache : IDisposable
         }
         else
         {
-            // 全部参照中 or同等なら簡易版として一つ適当に Remove
             foreach (var kv in entries)
             {
                 if (entries.TryRemove(kv.Key, out var victim2))

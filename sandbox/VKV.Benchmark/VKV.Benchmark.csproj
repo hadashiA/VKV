@@ -10,6 +10,7 @@
     <ItemGroup>
       <PackageReference Include="BenchmarkDotNet" Version="0.15.6" />
       <PackageReference Include="CsSqlite" Version="1.1.0" />
+      <PackageReference Include="System.Data.SQLite" Version="2.0.2" />
     </ItemGroup>
 
     <ItemGroup>

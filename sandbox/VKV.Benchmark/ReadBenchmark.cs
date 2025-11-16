@@ -26,7 +26,8 @@ public class ReadBenchmark
 
     DirectoryInfo directory;
     ReadOnlyDatabase database;
-    SqliteConnection sqliteConnection;
+    SqliteConnection cssqliteConnection;
+    System.Data.SQLite.SQLiteConnection systemSqliteConnection;
 
     string findKey = "key0000001234";
 
@@ -35,7 +36,7 @@ public class ReadBenchmark
     {
         directory = Directory.CreateTempSubdirectory("vkv_benchmarks");
         var sqlitePath = Path.Combine(directory.FullName, "bench.sqlite");
-        var drydbPath = Path.Combine(directory.FullName, "bench.dry");
+        var vkvPath = Path.Combine(directory.FullName, "bench.vkv");
 
         // Setup sqlite
         using (var sqlite = new SqliteConnection(sqlitePath))
@@ -63,7 +64,7 @@ public class ReadBenchmark
             }
         }
 
-        // Setup  DryDB
+        // Setup  VKV
         using var builder = new DatabaseBuilder
         {
             PageSize = 4096,
@@ -73,19 +74,21 @@ public class ReadBenchmark
         {
             tableBuilder.Append(i, Encoding.UTF8.GetBytes($"val{i:D10}"));
         }
-        await builder.SaveToFileAsync(drydbPath);
+        await builder.SaveToFileAsync(vkvPath);
 
-        database = await ReadOnlyDatabase.OpenFileAsync(drydbPath, new DatabaseLoadOptions
+        database = await ReadOnlyDatabase.OpenFileAsync(vkvPath, new DatabaseLoadOptions
         {
         });
 
-        sqliteConnection = new SqliteConnection(sqlitePath);
+        cssqliteConnection = new SqliteConnection(sqlitePath);
+        // systemSqliteConnection = new System.Data.SQLite.SQLiteConnection($"Data Source={sqlitePath}");
     }
 
     [GlobalCleanup]
     public void Cleanup()
     {
-        sqliteConnection.Dispose();
+        cssqliteConnection.Dispose();
+        // systemSqliteConnection.Dispose();
         database.Dispose();
 
         try
@@ -96,7 +99,7 @@ public class ReadBenchmark
     }
 
     [Benchmark(Baseline = true)]
-    public void DryDB_FindByKey()
+    public void VKV_FindByKey()
     {
         for (var i = 0; i < 1000; i++)
         {
@@ -106,11 +109,11 @@ public class ReadBenchmark
     }
 
     [Benchmark]
-    public void Sqlite_FindByKey()
+    public void CsSqlite_FindByKey()
     {
         for (var i = 0; i < 1000; i++)
         {
-            using var command = sqliteConnection.CreateCommand(
+            using var command = cssqliteConnection.CreateCommand(
                 "SELECT data FROM items WHERE id = $id");
 
             command.Parameters.Add("$id", 123);
@@ -119,4 +122,18 @@ public class ReadBenchmark
             reader.GetString(0);
         }
     }
+    //
+    // [Benchmark]
+    // public void SystemDataSql_FindByKey()
+    // {
+    //     for (var i = 0; i < 1000; i++)
+    //     {
+    //         using var command = systemSqliteConnection.CreateCommand();
+    //         command.CommandText = "SELECT data FROM items WHERE id = $id";
+    //         command.Parameters.AddWithValue("$id", 123);
+    //         using var reader = command.ExecuteReader();
+    //         reader.Read();
+    //         reader.GetString(0);
+    //     }
+    // }
 }
