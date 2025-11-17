@@ -1,0 +1,34 @@
+using System;
+using System.Runtime.CompilerServices;
+
+namespace VKV;
+
+public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
+{
+    public IPageEntry Page => entry;
+    public int Length => length;
+
+    public ReadOnlySpan<byte> Span
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Page.Memory.Span.Slice(start, length);
+    }
+
+    public ReadOnlyMemory<byte> Memory
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Page.Memory.Slice(start, length);
+    }
+
+    public void Dispose()
+    {
+        entry.Release();
+    }
+}
+
+public interface IPageEntry
+{
+    public PageNumber PageNumber { get; }
+    public ReadOnlyMemory<byte> Memory { get; }
+    public void Release();
+}

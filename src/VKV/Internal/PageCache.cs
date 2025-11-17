@@ -7,36 +7,6 @@ using System.Threading.Tasks;
 
 namespace VKV.Internal;
 
-public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
-{
-    public IPageEntry Page => entry;
-    public int Length => length;
-
-    public ReadOnlySpan<byte> Span
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Page.Memory.Span.Slice(start, length);
-    }
-
-    public ReadOnlyMemory<byte> Memory
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Page.Memory.Slice(start, length);
-    }
-
-    public void Dispose()
-    {
-        entry.Release();
-    }
-}
-
-public interface IPageEntry
-{
-    public PageNumber PageNumber { get; }
-    public ReadOnlyMemory<byte> Memory { get; }
-    public void Release();
-}
-
 public sealed class PageCache : IDisposable
 {
     class Entry : IPageEntry
@@ -75,7 +45,7 @@ public sealed class PageCache : IDisposable
     readonly object gate = new();
 #endif
 
-    readonly ConcurrentDictionary<PageNumber, Entry> entries;
+    readonly ConcurrentDictionary<PageNumber, Entry> entries = new();
     readonly IStorage storage;
     readonly int capacity;
     long globalClock;
@@ -86,8 +56,6 @@ public sealed class PageCache : IDisposable
     {
         this.storage = storage;
         this.capacity = capacity;
-
-        entries = new ConcurrentDictionary<PageNumber, Entry>();
     }
 
     public void Dispose()
@@ -133,26 +101,18 @@ public sealed class PageCache : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void AddEntry(PageNumber pageNumber, IMemoryOwner<byte> buffer)
     {
-        var stamp = Interlocked.Increment(ref globalClock);
-
-        entries.AddOrUpdate(
-            pageNumber,
-            static (key, arg) => new Entry
-            {
-                PageNumber = key,
-                Buffer = arg.buffer,
-                RefCount = 1,
-                LastAccess = arg.stamp
-            },
-            static (key, existing, arg) =>
-            {
-                existing.Release();
-                existing.Buffer = arg.buffer;
-                existing.RefCount = 1;
-                existing.LastAccess = arg.stamp;
-                existing.PageNumber = key;
-                return existing;
-            }, (buffer, stamp));
+        var newEntry = new Entry
+        {
+            PageNumber = pageNumber,
+            Buffer = buffer,
+            RefCount = 1,
+            LastAccess = Interlocked.Increment(ref globalClock)
+        };
+        if (!entries.TryAdd(pageNumber, newEntry))
+        {
+            // already exists
+            return;
+        }
 
         if (entries.Count > capacity)
         {
@@ -166,7 +126,7 @@ public sealed class PageCache : IDisposable
         PageNumber? victimKey = null;
         foreach (var (key, e) in entries)
         {
-            if (e.RefCount <= 0 && e.LastAccess < minStamp)
+            if (e.RefCount <= 1 && e.LastAccess < minStamp)
             {
                 minStamp = e.LastAccess;
                 victimKey = key;
