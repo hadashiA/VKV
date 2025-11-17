@@ -157,15 +157,11 @@ class TreeWalker
 
         while (true)
         {
-            if (!PageCache.TryGet(pageNumber, out var page))
+            IPageEntry page;
+            while (!PageCache.TryGet(pageNumber, out page))
             {
                 await PageCache.LoadAsync(pageNumber, cancellationToken)
                     .ConfigureAwait(false);
-
-                if (!PageCache.TryGet(pageNumber, out page))
-                {
-                    throw new InvalidOperationException($"Page not found {pageNumber}");
-                }
             }
 
             try
@@ -251,13 +247,10 @@ class TreeWalker
 
         while (true)
         {
-            if (!PageCache.TryGet(pageNumber, out var page))
+            IPageEntry page;
+            while (!PageCache.TryGet(pageNumber, out page))
             {
                 await PageCache.LoadAsync(pageNumber, cancellationToken).ConfigureAwait(false);
-                if (!PageCache.TryGet(pageNumber, out page))
-                {
-                    throw new InvalidOperationException($"Page not found {pageNumber}");
-                }
             }
 
             try
