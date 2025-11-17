@@ -48,8 +48,6 @@ unsafe struct NodeHeader
     [FieldOffset(20)]
     public PageNumber RightSiblingPageNumber;
 
-    public int FirstPayloadOffset => sizeof(int) + EntryCount;
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Parse(ReadOnlySpan<byte> page, out NodeHeader header, out ReadOnlySpan<byte> payload)
     {

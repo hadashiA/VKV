@@ -128,7 +128,7 @@ class TreeWalker
         CancellationToken cancellationToken = default)
     {
         var pageNumber = RootPageNumber;
-        var payloadOffset = 0;
+        var index = 0;
 
         // find start position
         if (startKey.HasValue)
@@ -138,7 +138,7 @@ class TreeWalker
                        nextPage.Value,
                        startKey.Value.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-                       out payloadOffset,
+                       out index,
                        out nextPage))
             {
                 if (nextPage.HasValue)
@@ -175,7 +175,7 @@ class TreeWalker
                 var leafNode = new LeafNodeReader(header, payload);
                 while (true)
                 {
-                    leafNode.GetAtOffset(payloadOffset, out var key, out _, out var nextOffset);
+                    leafNode.GetAt(index, out var key, out _, out _, out var nextIndex);
                     count++;
 
                     // check end key
@@ -191,8 +191,8 @@ class TreeWalker
                             if (compared >= 0) return count;
                         }
                     }
-                    if (!nextOffset.HasValue) break;
-                    payloadOffset = nextOffset.Value;
+                    if (!nextIndex.HasValue) break;
+                    index = nextIndex.Value;
                 }
 
                 // next node
@@ -201,7 +201,7 @@ class TreeWalker
                     return count;
                 }
                 pageNumber = header.RightSiblingPageNumber;
-                payloadOffset = 0;
+                index = 0;
             }
             finally
             {
@@ -218,7 +218,7 @@ class TreeWalker
         CancellationToken cancellationToken = default)
     {
         var pageNumber = RootPageNumber;
-        var payloadOffset = -1;
+        var index = 0;
 
         // find start position
         if (startKey.HasValue)
@@ -228,7 +228,7 @@ class TreeWalker
                        nextPage.Value,
                        startKey.Value.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-                       out payloadOffset,
+                       out index,
                        out nextPage))
             {
                 if (nextPage.HasValue)
@@ -255,24 +255,22 @@ class TreeWalker
 
             try
             {
-
                 NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
                 if (header.Kind != NodeKind.Leaf)
                 {
                     throw new InvalidOperationException("Invalid node kind");
                 }
 
-                if (payloadOffset < 0)
-                {
-                    payloadOffset = header.FirstPayloadOffset;
-                }
-
                 var leafNode = new LeafNodeReader(header, payload);
-
                 while (true)
                 {
-                    leafNode.GetAtOffset(payloadOffset, out var key, out var value, out var nextOffset);
-                    result.Add(new PageSlice(page, Unsafe.SizeOf<NodeHeader>() + payloadOffset, value.Length));
+                    leafNode.GetAt(
+                        index,
+                        out var key,
+                        out var valuePayloadOffset,
+                        out var valueLength,
+                        out var nextIndex);
+                    result.Add(new PageSlice(page, Unsafe.SizeOf<NodeHeader>() + valuePayloadOffset, valueLength));
 
                     // check end key
                     if (endKey.HasValue)
@@ -288,8 +286,8 @@ class TreeWalker
                         }
                     }
 
-                    if (!nextOffset.HasValue) break;
-                    payloadOffset = nextOffset.Value;
+                    if (!nextIndex.HasValue) break;
+                    index = nextIndex.Value;
                 }
 
                 // next node
@@ -299,7 +297,7 @@ class TreeWalker
                 }
 
                 pageNumber = header.RightSiblingPageNumber;
-                payloadOffset = -1;
+                index = 0;
             }
             finally
             {
@@ -374,24 +372,24 @@ class TreeWalker
     internal bool TrySearch(
         scoped ReadOnlySpan<byte> key,
         SearchOperator op,
-        out int payloadOffset,
-        out PageNumber? next) =>
-        TrySearch(RootPageNumber, key, op, out payloadOffset, out next);
+        out int index,
+        out PageNumber? nextPageNumber) =>
+        TrySearch(RootPageNumber, key, op, out index, out nextPageNumber);
 
     internal bool TrySearch(
         PageNumber from,
         scoped ReadOnlySpan<byte> key,
         SearchOperator op,
-        out int payloadOffset,
-        out PageNumber? next)
+        out int index,
+        out PageNumber? nextPageNumber)
     {
         var pageNumber = from;
         while (true)
         {
             if (!PageCache.TryGet(pageNumber, out var page))
             {
-                payloadOffset = default;
-                next = pageNumber;
+                index = default;
+                nextPageNumber = pageNumber;
                 return false;
             }
 
@@ -402,22 +400,22 @@ class TreeWalker
                 if (!internalNode.TrySearch(key, keyComparer, out pageNumber))
                 {
                     page.Release();
-                    payloadOffset = default;
-                    next = null;
+                    index = default;
+                    nextPageNumber = null;
                     return false;
                 }
             }
             else // Leaf
             {
-                next = null;
+                nextPageNumber = null;
 
                 var leafNode = new LeafNodeReader(header, payload);
-                if (leafNode.TrySearch(key, op, keyComparer, out payloadOffset))
+                if (leafNode.TrySearch(key, op, keyComparer, out index))
                 {
                     return true;
                 }
                 page.Release();
-                payloadOffset = default;
+                index = default;
                 return false;
             }
             page.Release();

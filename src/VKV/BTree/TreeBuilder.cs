@@ -14,15 +14,13 @@ namespace VKV.BTree;
 sealed class NodeEntry(int pageSize)
 {
     public readonly byte[] KeyValueBuffer = new byte[pageSize];
-    public readonly List<int> KeyValueSizes = [];
+    public readonly List<(int KeyLength, int ValueLength)> KeyValueSizes = [];
     public int KeyValueBufferOffset;
     public PageNumber PrevNodeStartPageNumber = PageNumber.Empty;
     public ReadOnlyMemory<byte>? FirstKey;
 
     public int PageSize => pageSize;
     public int EntryCount => KeyValueSizes.Count;
-    public int PayloadLength => sizeof(int) * EntryCount + KeyValueBufferOffset;
-    public int PageOffset => TreeBuilder.NodeHeaderSize + PayloadLength;
 
     public void Reset()
     {
@@ -60,9 +58,9 @@ static class TreeBuilder
                 leaf.FirstKey = key;
             }
 
-            // (klen:u16)(vlen:u16)(key)(val) + (offset)
-            var keyValueLength = sizeof(ushort) * 2 + key.Length + value.Length;
-            if (leaf.PageOffset + keyValueLength + sizeof(int) > pageSize)
+            var needs = NodeHeaderSize + (leaf.EntryCount + 1) * (sizeof(int) + sizeof(ushort) * 2) +
+                        leaf.KeyValueBufferOffset + key.Length + value.Length;
+            if (needs > pageSize)
             {
                 await RotatePageAsync(outStream, nodes, 0, true, pageFilters, cancellationToken).ConfigureAwait(false);
                 if (nodes[0].EntryCount <= 0)
@@ -80,22 +78,19 @@ static class TreeBuilder
 #endif
             keyValueBufferReference = ref Unsafe.Add(ref keyValueBufferReference, leaf.KeyValueBufferOffset);
 
-            Unsafe.WriteUnaligned(ref keyValueBufferReference, (ushort)key.Length);
-            keyValueBufferReference = ref Unsafe.Add(ref keyValueBufferReference, sizeof(ushort));
-
-            Unsafe.WriteUnaligned(ref keyValueBufferReference, (ushort)value.Length);
-            keyValueBufferReference = ref Unsafe.Add(ref keyValueBufferReference, sizeof(ushort));
-
             Unsafe.CopyBlockUnaligned(
                 ref keyValueBufferReference,
                 ref MemoryMarshal.GetReference(key.Span),
                 (uint)key.Length);
             keyValueBufferReference = ref Unsafe.Add(ref keyValueBufferReference, key.Length);
 
-            Unsafe.CopyBlockUnaligned(ref keyValueBufferReference, ref MemoryMarshal.GetReference(value.Span), (uint)value.Length);
+            Unsafe.CopyBlockUnaligned(
+                ref keyValueBufferReference,
+                ref MemoryMarshal.GetReference(value.Span),
+                (uint)value.Length);
 
-            leaf.KeyValueSizes.Add(keyValueLength);
-            leaf.KeyValueBufferOffset += keyValueLength;
+            leaf.KeyValueSizes.Add((key.Length, value.Length));
+            leaf.KeyValueBufferOffset += key.Length + value.Length;
         }
 
         while (true)
@@ -132,11 +127,15 @@ static class TreeBuilder
         var currentNode = nodeEntries[level];
         var currentPos = new PageNumber(outStream.Position);
 
+        var kind = level == 0 ? NodeKind.Leaf : NodeKind.Internal;
         var header = new NodeHeader
         {
-            Kind = level == 0 ? NodeKind.Leaf : NodeKind.Internal,
+            Kind = kind,
             EntryCount = currentNode.EntryCount,
-            PayloadLength = currentNode.PageOffset - NodeHeaderSize,
+            PayloadLength = currentNode.EntryCount * (kind == NodeKind.Leaf
+                                ? sizeof(int) + sizeof(ushort) * 2
+                                : sizeof(int) + sizeof(ushort)) +
+                            currentNode.KeyValueBufferOffset,
             LeftSiblingPageNumber = currentNode.PrevNodeStartPageNumber,
             RightSiblingPageNumber = PageNumber.Empty
         };
@@ -185,8 +184,9 @@ static class TreeBuilder
             parent.FirstKey = sepKey;
         }
 
-        var keyValueLength = sizeof(ushort) + sepKey.Length + sizeof(long);
-        if (parent.PageOffset + keyValueLength + sizeof(int) > parent.PageSize)
+        var needs = NodeHeaderSize + (parent.EntryCount + 1) * (sizeof(int) + sizeof(ushort)) +
+                    parent.KeyValueBufferOffset + sepKey.Length + sizeof(long);
+        if (needs > parent.PageSize)
         {
             await RotatePageAsync(outStream, nodeEntries, parentLevel, true, pageFilters, cancellationToken)
                 .ConfigureAwait(false);
@@ -201,9 +201,6 @@ static class TreeBuilder
 #endif
         parentKeyValueBufferReference = ref Unsafe.Add(ref parentKeyValueBufferReference, parent.KeyValueBufferOffset);
 
-        Unsafe.WriteUnaligned(ref parentKeyValueBufferReference, (ushort)sepKey.Length);
-        parentKeyValueBufferReference = ref Unsafe.Add(ref parentKeyValueBufferReference, sizeof(ushort));
-
         Unsafe.CopyBlockUnaligned(
             ref parentKeyValueBufferReference,
             ref MemoryMarshal.GetReference(sepKey.Span),
@@ -212,8 +209,8 @@ static class TreeBuilder
 
         Unsafe.WriteUnaligned(ref parentKeyValueBufferReference, currentPos.Value);
 
-        parent.KeyValueSizes.Add(keyValueLength);
-        parent.KeyValueBufferOffset += keyValueLength;
+        parent.KeyValueSizes.Add((sepKey.Length, sizeof(long)));
+        parent.KeyValueBufferOffset += sepKey.Length + sizeof(long);
 
         currentNode.Reset();
         currentNode.PrevNodeStartPageNumber = currentPos;
@@ -232,15 +229,34 @@ static class TreeBuilder
         await outStream.WriteAsync(
             buffer.AsMemory(0, NodeHeaderSize),
             cancellationToken).ConfigureAwait(false);
+        ArrayPool<byte>.Shared.Return(buffer);
 
-        // write offset table
-        var payloadOffset = node.EntryCount * sizeof(int);
-        foreach (var keyValueLength in node.KeyValueSizes)
+        // write meta(s)
+        buffer =  ArrayPool<byte>.Shared.Rent(sizeof(int) + sizeof(ushort) * 2);
+
+        var metaSize = header.Kind == NodeKind.Leaf
+            ? sizeof(int) + sizeof(ushort) * 2
+            : sizeof(int) + sizeof(ushort);
+
+        var payloadOffset = node.EntryCount * metaSize;
+        foreach (var (keyLength, valueLength) in node.KeyValueSizes)
         {
             BinaryPrimitives.WriteInt32LittleEndian(buffer, payloadOffset);
-            await outStream.WriteAsync(buffer.AsMemory(0, sizeof(int)), cancellationToken )
+            var offset = sizeof(int);
+
+            BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), (ushort)keyLength);
+            offset += sizeof(ushort);
+
+            if (header.Kind == NodeKind.Leaf)
+            {
+                // variable length value
+                BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), (ushort)valueLength);
+                offset += sizeof(ushort);
+            }
+
+            await outStream.WriteAsync(buffer.AsMemory(0, offset), cancellationToken )
                 .ConfigureAwait(false);
-            payloadOffset += keyValueLength;
+            payloadOffset += keyLength + valueLength;
         }
         ArrayPool<byte>.Shared.Return(buffer);
 

@@ -30,7 +30,7 @@ public class TreeWalkerTest
         var result = tree.TrySearch(
             "key3"u8.ToArray(),
             SearchOperator.Equal,
-            out var pos,
+            out var index,
             out var nextPageNumber);
 
         Assert.That(result, Is.False);
@@ -42,7 +42,7 @@ public class TreeWalkerTest
         result = tree.TrySearch(
             "key3"u8.ToArray(),
             SearchOperator.Equal,
-            out pos,
+            out index,
             out nextPageNumber);
         Assert.That(result, Is.True);
         Assert.That(nextPageNumber.HasValue, Is.False);
@@ -52,7 +52,7 @@ public class TreeWalkerTest
         NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
         var leafNode = new LeafNodeReader(header, payload);
 
-        leafNode.GetAtOffset(pos, out var key, out var value, out var nextOffset);
+        leafNode.GetAt(index, out var key, out var value, out _);
         Assert.That(key.SequenceEqual("key3"u8), Is.True);
         Assert.That(value.SequenceEqual("value3"u8), Is.True);
     }
@@ -111,7 +111,7 @@ public class TreeWalkerTest
         NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
         var leafNode = new LeafNodeReader(header, payload);
 
-        leafNode.GetAtOffset(pos, out var key, out var value, out _);
+        leafNode.GetAt(pos, out var key, out var value, out _);
         Assert.That(key.SequenceEqual("key03"u8), Is.True);
         Assert.That(value.SequenceEqual("value03"u8), Is.True);
     }
@@ -170,7 +170,7 @@ public class TreeWalkerTest
         NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
         var leafNode = new LeafNodeReader(header, payload);
 
-        leafNode.GetAtOffset(pos, out var key, out var value, out _);
+        leafNode.GetAt(pos, out var key, out var value, out _);
         Assert.That(key.SequenceEqual("key04"u8), Is.True);
         Assert.That(value.SequenceEqual("value04"u8), Is.True);
     }

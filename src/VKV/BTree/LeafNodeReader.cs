@@ -10,48 +10,67 @@ namespace VKV.BTree;
 ///  Leaf Node Reader
 /// </summary>>
 /// <remarks>
-/// (offset-table sizeof(int) * entryCount)
-/// ┌───────────┬───────────┬──────┬────────┐
-/// │ keylen(2) │ vallen(2) │ key  │ value  |
-/// ├───────────┼───────────┼──────┼────────┤
-/// │ keylen(2) │ vallen(2) │ key  │ value |
-/// ├────────┼──────────────┼──────────────┤
-/// │   ...   │     ...      │     ...     │
-/// └────────┴──────────────┴──────────────┘
 /// </remarks>
 readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload)
 {
+    [StructLayout(LayoutKind.Explicit, Size = 6, Pack = 1)]
+    struct NodeEntryMeta
+    {
+        [FieldOffset(0)]
+        public int PayloadOffset;
+
+        [FieldOffset(4)]
+        public ushort KeyLength;
+
+        [FieldOffset(6)]
+        public ushort ValueLength;
+    }
+
 #if NETSTANDARD
     readonly ReadOnlySpan<byte> payload = payload;
 #else
     readonly ref byte payloadReference = ref MemoryMarshal.GetReference(payload);
 #endif
     readonly int entryCount = header.EntryCount;
-    readonly int payloadLength = header.PayloadLength;
 
-    public void GetAtOffset(
-        int payloadOffset,
+    public void GetAt(
+        int index,
         out ReadOnlySpan<byte> key,
         out ReadOnlySpan<byte> value,
-        out int? nextPayloadOffset)
+        out int? nextIndex)
     {
-        ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(payload),
-#else
-            ref payloadReference,
+        ref var payloadReference = ref MemoryMarshal.GetReference(payload);
 #endif
-            payloadOffset);
-        var keyLen = Unsafe.ReadUnaligned<ushort>(ref ptr);
-        ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
-        var valLen = Unsafe.ReadUnaligned<ushort>(ref ptr);
-        ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
-        key = MemoryMarshal.CreateReadOnlySpan(ref ptr, keyLen);
-        ptr = ref Unsafe.Add(ref ptr, keyLen);
-        value = MemoryMarshal.CreateReadOnlySpan(ref ptr, valLen);
+        var meta = GetMeta(index);
+        ref var ptr = ref Unsafe.Add(ref payloadReference, meta.PayloadOffset);
+        key = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
+        ptr = ref Unsafe.Add(ref ptr, meta.KeyLength);
 
-        nextPayloadOffset = payloadOffset + sizeof(ushort) * 2 + keyLen + valLen;
-        nextPayloadOffset = nextPayloadOffset < payloadLength ? nextPayloadOffset : null;
+        value = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.ValueLength);
+
+        nextIndex = index + 1 < entryCount ?  index + 1 : null;
+    }
+
+    public void GetAt(
+        int index,
+        out ReadOnlySpan<byte> key,
+        out int valuePayloadOffset,
+        out int valueLength,
+        out int? nextIndex)
+    {
+#if NETSTANDARD
+        ref var payloadReference = ref MemoryMarshal.GetReference(payload);
+#endif
+        var meta = GetMeta(index);
+        ref var ptr = ref Unsafe.Add(ref payloadReference, meta.PayloadOffset);
+        key = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
+        ptr = ref Unsafe.Add(ref ptr, meta.KeyLength);
+
+        valuePayloadOffset = meta.PayloadOffset + meta.KeyLength;
+        valueLength = meta.ValueLength;
+
+        nextIndex = index + 1 < entryCount ?  index + 1 : null;
     }
 
     public bool TryFindValue(
@@ -60,22 +79,20 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
         out int valuePayloadOffset,
         out int valueLength)
     {
-        if (TrySearch(key, SearchOperator.Equal, keyComparer, out var offset))
+        if (TrySearch(key, SearchOperator.Equal, keyComparer, out var index))
         {
+            var meta = GetMeta(index);
+
             ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
                 ref MemoryMarshal.GetReference(payload),
 #else
                 ref payloadReference,
 #endif
-                offset);
-            var keyLength = Unsafe.ReadUnaligned<ushort>(ref ptr);
-            ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
+                meta.PayloadOffset);
 
-            valueLength = Unsafe.ReadUnaligned<ushort>(ref ptr);
-            ptr = ref Unsafe.Add(ref ptr, sizeof(ushort) + keyLength);
-
-            valuePayloadOffset = offset + keyLength + sizeof(ushort) * 2;
+            valuePayloadOffset = meta.PayloadOffset + meta.KeyLength;
+            valueLength = meta.ValueLength;
             return true;
         }
 
@@ -88,7 +105,7 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
         ReadOnlySpan<byte> key,
         SearchOperator op,
         IKeyComparer keyComparer,
-        out int payloadOffset)
+        out int index)
     {
         var min = 0;
         var max = entryCount;
@@ -97,7 +114,7 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
         while (min < max)
         {
             var midIndex = min + ((max - min) >> 1);
-            var midOffset = PayloadOffsetOf(midIndex);
+            var midMeta = GetMeta(midIndex);
 
             ref var ptr = ref Unsafe.Add(
 #if  NETSTANDARD
@@ -105,11 +122,9 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
 #else
                 ref payloadReference,
 #endif
-                midOffset);
-            var keyLen = Unsafe.ReadUnaligned<ushort>(ref ptr);
-            ptr = ref Unsafe.Add(ref ptr, sizeof(ushort) * 2);
+                midMeta.PayloadOffset);
 
-            var midKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, keyLen);
+            var midKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, midMeta.KeyLength);
 
             var compared = keyComparer.Compare(midKey, key);
             switch (op)
@@ -117,7 +132,7 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
                 case SearchOperator.Equal:
                     if (compared == 0)
                     {
-                        payloadOffset = PayloadOffsetOf(midIndex);
+                        index = midIndex;
                         return true;
                     }
                     if (compared < 0)
@@ -159,7 +174,7 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
 
         if (resultIndex < 0)
         {
-            payloadOffset = default;
+            index = default;
             return false;
         }
 
@@ -168,40 +183,36 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
             case SearchOperator.Equal:
                 if (min < max)
                 {
-                    var off = PayloadOffsetOf(min);
+                    var meta = GetMeta(min);
                     ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
                         ref MemoryMarshal.GetReference(payload),
 #else
                         ref payloadReference,
 #endif
-                        off);
-                    var len = Unsafe.ReadUnaligned<ushort>(ref ptr);
-                    ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
-                    ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
-                    var foundKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, len);
-
+                        meta.PayloadOffset);
+                    var foundKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
                     if (keyComparer.Compare(foundKey, key) == 0)
                     {
-                        payloadOffset = PayloadOffsetOf(min);
+                        index = min;
                         return true;
                     }
                 }
-                payloadOffset = default;
+                index = default;
                 return false;
 
             case SearchOperator.LowerBound:
                 // >= key
-                payloadOffset = PayloadOffsetOf(min);
+                index = min;
                 return true;
 
             case SearchOperator.UpperBound:
                 // > key
-                payloadOffset = PayloadOffsetOf(min);
+                index = min;
                 return true;
 
             default:
-                payloadOffset = default;
+                index = default;
                 return false;
         }
     }
@@ -220,17 +231,16 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
         var list = new List<KeyValuePair<Memory<byte>, Memory<byte>>>(entryCount);
         for (var i = 0; i < entryCount; i++)
         {
-            var keyLen = Unsafe.ReadUnaligned<ushort>(ref ptr);
-            ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
+            var meta = Unsafe.ReadUnaligned<NodeEntryMeta>(
+                ref Unsafe.Add(ref ptr, i * Unsafe.SizeOf<NodeEntryMeta>()));
 
-            var valLen = Unsafe.ReadUnaligned<ushort>(ref ptr);
-            ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
+            var key = MemoryMarshal.CreateReadOnlySpan(
+                ref Unsafe.Add(ref ptr, meta.PayloadOffset),
+                meta.KeyLength);
 
-            var key = MemoryMarshal.CreateReadOnlySpan(ref ptr, keyLen);
-            ptr = ref Unsafe.Add(ref ptr, keyLen);
-
-            var value = MemoryMarshal.CreateReadOnlySpan(ref ptr, valLen);
-            ptr = ref Unsafe.Add(ref ptr, valLen);
+            var value = MemoryMarshal.CreateReadOnlySpan(
+                ref Unsafe.Add(ref ptr, meta.PayloadOffset + meta.KeyLength),
+                meta.ValueLength);
 
             list.Add(new KeyValuePair<Memory<byte>, Memory<byte>>(key.ToArray(), value.ToArray()));
         }
@@ -249,15 +259,15 @@ readonly ref struct LeafNodeReader(NodeHeader header, ReadOnlySpan<byte> payload
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    int PayloadOffsetOf(int index)
+    NodeEntryMeta GetMeta(int index)
     {
-        ref var offsetTableReference = ref Unsafe.Add(
+        ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
             ref MemoryMarshal.GetReference(payload),
 #else
                 ref payloadReference,
 #endif
-            index * sizeof(int));
-        return Unsafe.ReadUnaligned<int>(ref offsetTableReference);
+            index * Unsafe.SizeOf<NodeEntryMeta>());
+        return Unsafe.ReadUnaligned<NodeEntryMeta>(ref ptr);
     }
 }
