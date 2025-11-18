@@ -238,7 +238,7 @@ static class TreeBuilder
             ? sizeof(int) + sizeof(ushort) * 2
             : sizeof(int) + sizeof(ushort);
 
-        var payloadOffset = node.EntryCount * metaSize;
+        var payloadOffset = Unsafe.SizeOf<NodeHeader>() + node.EntryCount * metaSize;
         foreach (var (keyLength, valueLength) in node.KeyValueSizes)
         {
             BinaryPrimitives.WriteInt32LittleEndian(buffer, payloadOffset);

@@ -49,9 +49,8 @@ unsafe struct NodeHeader
     public PageNumber RightSiblingPageNumber;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Parse(ReadOnlySpan<byte> page, out NodeHeader header, out ReadOnlySpan<byte> payload)
+    public static NodeHeader Parse(ReadOnlySpan<byte> page)
     {
-        header = Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(page));
-        payload = page.Slice(Unsafe.SizeOf<NodeHeader>(), header.PayloadLength);
+        return Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(page));
     }
 }

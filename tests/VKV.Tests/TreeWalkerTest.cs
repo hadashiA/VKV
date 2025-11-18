@@ -49,8 +49,8 @@ public class TreeWalkerTest
 
         Assert.That(tree.PageCache.TryGet(pageNumber, out var page), Is.True);
 
-        NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
-        var leafNode = new LeafNodeReader(header, payload);
+        var nodeHeader = NodeHeader.Parse(page.Memory.Span);
+        var leafNode = new LeafNodeReader(page.Memory.Span, nodeHeader.EntryCount);
 
         leafNode.GetAt(index, out var key, out var value, out _);
         Assert.That(key.SequenceEqual("key3"u8), Is.True);
@@ -108,8 +108,8 @@ public class TreeWalkerTest
 
         Assert.That(tree.PageCache.TryGet(pageNumber, out var page), Is.True);
 
-        NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
-        var leafNode = new LeafNodeReader(header, payload);
+        var header = NodeHeader.Parse(page.Memory.Span);
+        var leafNode = new LeafNodeReader(page.Memory.Span, header.EntryCount);
 
         leafNode.GetAt(pos, out var key, out var value, out _);
         Assert.That(key.SequenceEqual("key03"u8), Is.True);
@@ -167,8 +167,8 @@ public class TreeWalkerTest
 
         Assert.That(tree.PageCache.TryGet(pageNumber, out var page), Is.True);
 
-        NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
-        var leafNode = new LeafNodeReader(header, payload);
+        var header = NodeHeader.Parse(page.Memory.Span);
+        var leafNode = new LeafNodeReader(page.Memory.Span, header.EntryCount);
 
         leafNode.GetAt(pos, out var key, out var value, out _);
         Assert.That(key.SequenceEqual("key04"u8), Is.True);

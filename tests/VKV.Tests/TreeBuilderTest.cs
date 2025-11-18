@@ -26,7 +26,7 @@ public class TreeBuilderTest
             keyValues);
 
         var result = memoryStream.ToArray();
-        NodeHeader.Parse(result, out var header, out var payload);
+        var header = NodeHeader.Parse(result);
 
         Assert.That(pos.Value, Is.EqualTo(0));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Leaf));
@@ -57,18 +57,18 @@ public class TreeBuilderTest
 
         var result = memoryStream.ToArray();
 
-        NodeHeader.Parse(result.AsSpan((int)pos.Value), out var header, out var payload);
+        var header = NodeHeader.Parse(result.AsSpan((int)pos.Value));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Internal));
         Assert.That(header.EntryCount, Is.EqualTo(2));
 
-        var internalNode = new InternalNodeReader(in header, payload);
+        var internalNode = new InternalNodeReader(result.AsSpan((int)pos.Value), header.EntryCount);
         internalNode.GetAt(0, out var internalKey1, out var childPosition1);
         internalNode.GetAt(1, out var internalKey2, out var childPosition2);
 
         Assert.That(internalKey1.SequenceEqual("key01"u8), Is.True);
         Assert.That(internalKey2.SequenceEqual("key06"u8), Is.True);
 
-        NodeHeader.Parse(result.AsSpan((int)childPosition1), out header, out payload);
+        header = NodeHeader.Parse(result.AsSpan((int)childPosition1));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Leaf));
         Assert.That(header.EntryCount, Is.EqualTo(5));
         Assert.That(header.LeftSiblingPageNumber.IsEmpty, Is.True);

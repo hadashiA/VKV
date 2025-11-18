@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.Internal;
@@ -166,13 +167,14 @@ class TreeWalker
 
             try
             {
-                NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
+                var span = page.Memory.Span;
+                var header = Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(span));
                 if (header.Kind != NodeKind.Leaf)
                 {
                     throw new InvalidOperationException("Invalid node kind");
                 }
 
-                var leafNode = new LeafNodeReader(header, payload);
+                var leafNode = new LeafNodeReader(span, header.EntryCount);
                 while (true)
                 {
                     leafNode.GetAt(index, out var key, out _, out _, out var nextIndex);
@@ -255,13 +257,14 @@ class TreeWalker
 
             try
             {
-                NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
+                var pageSpan = page.Memory.Span;
+                var header = NodeHeader.Parse(pageSpan);
                 if (header.Kind != NodeKind.Leaf)
                 {
                     throw new InvalidOperationException("Invalid node kind");
                 }
 
-                var leafNode = new LeafNodeReader(header, payload);
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 while (true)
                 {
                     leafNode.GetAt(
@@ -338,10 +341,11 @@ class TreeWalker
                 return false;
             }
 
-            NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
+            var pageSpan = page.Memory.Span;
+            var header = NodeHeader.Parse(pageSpan);
             if (header.Kind == NodeKind.Internal)
             {
-                var internalNode = new InternalNodeReader(in header, payload);
+                var internalNode = new InternalNodeReader(pageSpan, header.EntryCount);
                 if (!internalNode.TrySearch(key, keyComparer, out pageNumber))
                 {
                     page.Release();
@@ -354,10 +358,10 @@ class TreeWalker
             {
                 next = null;
 
-                var leafNode = new LeafNodeReader(header, payload);
-                if (leafNode.TryFindValue(key, keyComparer, out var valuePayloadOffset, out var valueLength))
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
+                if (leafNode.TryFindValue(key, keyComparer, out var valueOffset, out var valueLength))
                 {
-                    value = new PageSlice(page, NodeHeader.Size + valuePayloadOffset, valueLength);
+                    value = new PageSlice(page, valueOffset, valueLength);
                     return true;
                 }
 
@@ -393,10 +397,11 @@ class TreeWalker
                 return false;
             }
 
-            NodeHeader.Parse(page.Memory.Span, out var header, out var payload);
+            var pageSpan = page.Memory.Span;
+            var header = NodeHeader.Parse(pageSpan);
             if (header.Kind == NodeKind.Internal)
             {
-                var internalNode = new InternalNodeReader(in header, payload);
+                var internalNode = new InternalNodeReader(pageSpan, header.EntryCount);
                 if (!internalNode.TrySearch(key, keyComparer, out pageNumber))
                 {
                     page.Release();
@@ -409,7 +414,7 @@ class TreeWalker
             {
                 nextPageNumber = null;
 
-                var leafNode = new LeafNodeReader(header, payload);
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 if (leafNode.TrySearch(key, op, keyComparer, out index))
                 {
                     return true;

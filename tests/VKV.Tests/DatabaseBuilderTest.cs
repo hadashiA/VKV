@@ -35,7 +35,7 @@ public class DatabaseBuilderTest
         Assert.That(primaryKeyDescriptor.ValueKind, Is.EqualTo(ValueKind.RawData));
 
         var treeBytes = memoryStream.ToArray().AsSpan((int)primaryKeyDescriptor.RootPageNumber.Value);
-        NodeHeader.Parse(treeBytes, out var nodeHeader, out var payload);
+        var nodeHeader = NodeHeader.Parse(treeBytes);
         Assert.That(nodeHeader.EntryCount, Is.EqualTo(3));
         Assert.That(nodeHeader.Kind, Is.EqualTo(NodeKind.Leaf));
         Assert.That(nodeHeader.EntryCount, Is.EqualTo(3));
