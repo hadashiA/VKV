@@ -18,7 +18,7 @@ using (var builder = new DatabaseBuilder
     {
         tableBuilder.Append(i, Encoding.UTF8.GetBytes($"{i:D10}"));
     }
-    await builder.SaveToFileAsync(drydbPath);
+    await builder.BuildToFileAsync(drydbPath);
     // var memoryStream = new MemoryStream();
     // await builder.SaveToStreamAsync(memoryStream);
     Console.WriteLine(drydbPath);

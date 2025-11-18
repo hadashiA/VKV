@@ -74,7 +74,7 @@ public class ReadBenchmark
         {
             tableBuilder.Append(i, Encoding.UTF8.GetBytes($"val{i:D10}"));
         }
-        await builder.SaveToFileAsync(vkvPath);
+        await builder.BuildToFileAsync(vkvPath);
 
         database = await ReadOnlyDatabase.OpenFileAsync(vkvPath, new DatabaseLoadOptions
         {

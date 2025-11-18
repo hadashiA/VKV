@@ -21,7 +21,7 @@ public class DatabaseBuilderTest
         itemsTable.Append("item3"u8.ToArray(), "value3"u8.ToArray());
 
         var memoryStream = new MemoryStream(4096 * 2);
-        await builder.SaveToStreamAsync(memoryStream);
+        await builder.BuildToStreamAsync(memoryStream);
 
         memoryStream.Seek(0, SeekOrigin.Begin);
         var catalog = await CatalogParser.ParseAsync(memoryStream);
@@ -56,7 +56,7 @@ public class DatabaseBuilderTest
         itemsTable.Append("item3"u8.ToArray(), "value3"u8.ToArray());
 
         var memoryStream = new MemoryStream(4096 * 2);
-        await builder.SaveToStreamAsync(memoryStream);
+        await builder.BuildToStreamAsync(memoryStream);
 
         memoryStream.Seek(0, SeekOrigin.Begin);
         var catalog = await CatalogParser.ParseAsync(memoryStream);

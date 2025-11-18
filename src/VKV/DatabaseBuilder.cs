@@ -212,13 +212,13 @@ public class DatabaseBuilder : IDisposable
         return tableBuilder;
     }
 
-    public async ValueTask SaveToFileAsync(string path, CancellationToken cancellationToken = default)
+    public async ValueTask BuildToFileAsync(string path, CancellationToken cancellationToken = default)
     {
         await using var fs = File.OpenWrite(path);
-        await SaveToStreamAsync(fs, cancellationToken);
+        await BuildToStreamAsync(fs, cancellationToken);
     }
 
-    public async ValueTask SaveToStreamAsync(Stream stream, CancellationToken cancellationToken = default)
+    public async ValueTask BuildToStreamAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         var header = new Header();
 

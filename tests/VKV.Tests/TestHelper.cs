@@ -38,7 +38,7 @@ static class TestHelper
         tableConfigure?.Invoke(tableBuilder);
 
         var memoryStream = new MemoryStream(1024);
-        await builder.SaveToStreamAsync(memoryStream);
+        await builder.BuildToStreamAsync(memoryStream);
 
         memoryStream.Seek(0, SeekOrigin.Begin);
         var database = await ReadOnlyDatabase.OpenAsync(memoryStream, loadOptions);

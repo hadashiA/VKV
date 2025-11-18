@@ -5,6 +5,13 @@
 
 VKV is a red-only embedded B+Tree based key/value database, implemented pure C#.
 
+```
+| Method             | Mean        | Error     | StdDev    |
+|------------------- |------------:|----------:|----------:|
+| VKV_FindByKey      |    37.57 us |  0.230 us |  0.120 us |
+| CsSqlite_FindByKey | 4,322.48 us | 44.492 us | 26.476 us |
+```
+
 ## Features
 
 - B+Tree based query
@@ -17,10 +24,10 @@ VKV is a red-only embedded B+Tree based key/value database, implemented pure C#.
 - Unity Integration
   - AsyncReadManager + NativeArray<byte> based optimized custom loader.     
 - Page filter
-  - Cysharp/NativeCompression based page compress
   - aa
   - custom page filter 
 - TODO
+  - Cysharp/NativeCompression based page compress
   - Read values by key prefix
   - C# Driect Serialization
   - Multiple table JOINs
@@ -56,12 +63,15 @@ var table2 = builder.CreateTable("quests", KeyEncoding.Int64LittleEndian);
 table2.Append(1, "hoge"u8.ToArray());
 
 // Build
-await builder.SaveToFileAsync("/path/to/bin.drydb");
+await builder.BuildToFileAsync("/path/to/bin.drydb");
 ```
 
 ```cs
 // Open DB
-var database = await ReadOnlyDatabase.OpenAsync("/pth/to/bin.drydb");
+var database = await ReadOnlyDatabase.OpenAsync("/pth/to/bin.drydb", new DatabaseLoadOptions
+{
+    PageCacheCapacity = 8, // Maximum number of pages to keep in memory
+});
 
 var table = database.GetTable("items");
 
