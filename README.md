@@ -31,6 +31,7 @@ VKV is a red-only embedded B+Tree based key/value database, implemented pure C#.
   - Read values by key prefix
   - C# Driect Serialization
   - Multiple table JOINs
+  - Full scan
 
 ## Why read-only ?
 
@@ -63,12 +64,12 @@ var table2 = builder.CreateTable("quests", KeyEncoding.Int64LittleEndian);
 table2.Append(1, "hoge"u8.ToArray());
 
 // Build
-await builder.BuildToFileAsync("/path/to/bin.drydb");
+await builder.BuildToFileAsync("/path/to/bin.vkv");
 ```
 
 ```cs
 // Open DB
-var database = await ReadOnlyDatabase.OpenAsync("/pth/to/bin.drydb", new DatabaseLoadOptions
+var database = await ReadOnlyDatabase.OpenAsync("/pth/to/bin.vkv", new DatabaseLoadOptions
 {
     PageCacheCapacity = 8, // Maximum number of pages to keep in memory
 });
