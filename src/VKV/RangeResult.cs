@@ -2,11 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using VKV.Internal;
 
 namespace VKV;
 
-public class RangeResult : IDisposable, IEnumerable<PageSlice>
+public class RangeResult : IDisposable, IEnumerable<ReadOnlyMemory<byte>>
 {
     static readonly ConcurrentQueue<RangeResult> Pool = new();
 
@@ -23,24 +22,30 @@ public class RangeResult : IDisposable, IEnumerable<PageSlice>
 
     public int Count => list.Count;
 
-    readonly List<PageSlice> list = [];
+    readonly List<ReadOnlyMemory<byte>> list = [];
+    readonly List<IPageEntry> referencePages = [];
 
-    internal void Add(PageSlice pageSlice)
+    internal void Add(IPageEntry page, int start, int length)
     {
-        list.Add(pageSlice);
+        list.Add(page.Memory.Slice(start, length));
+        if (!referencePages.Contains(page))
+        {
+            referencePages.Add(page);
+        }
     }
 
     public void Dispose()
     {
-        foreach (var pageSlice in list)
+        foreach (var referencePage in referencePages)
         {
-            pageSlice.Dispose();
+            referencePage.Release();
         }
         list.Clear();
+        referencePages.Clear();
         Pool.Enqueue(this);
     }
 
-    public List<PageSlice>.Enumerator GetEnumerator() => list.GetEnumerator();
-    IEnumerator<PageSlice> IEnumerable<PageSlice>.GetEnumerator() => GetEnumerator();
+    public List<ReadOnlyMemory<byte>>.Enumerator GetEnumerator() => list.GetEnumerator();
+    IEnumerator<ReadOnlyMemory<byte>> IEnumerable<ReadOnlyMemory<byte>>.GetEnumerator() => GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

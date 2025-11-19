@@ -32,11 +32,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
     readonly ref byte pageReference = ref MemoryMarshal.GetReference(page);
 #endif
 
-    public void GetAt(
-        int index,
-        out ReadOnlySpan<byte> key,
-        out ReadOnlySpan<byte> value,
-        out int? nextIndex)
+    public void GetAt(int index, out ReadOnlySpan<byte> key, out ReadOnlySpan<byte> value)
     {
 #if NETSTANDARD
         ref var pageReference = ref MemoryMarshal.GetReference(page);
@@ -49,16 +45,9 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
         value = MemoryMarshal.CreateReadOnlySpan(
             ref Unsafe.Add(ref pageReference, meta.PageOffset + meta.KeyLength),
             meta.ValueLength);
-
-        nextIndex = index + 1 < entryCount ?  index + 1 : null;
     }
 
-    public void GetAt(
-        int index,
-        out ReadOnlySpan<byte> key,
-        out int valuePayloadOffset,
-        out int valueLength,
-        out int? nextIndex)
+    public void GetAt(int index, out ReadOnlySpan<byte> key, out int valuePageOffset, out ushort valueLength)
     {
 #if NETSTANDARD
         ref var pageReference = ref MemoryMarshal.GetReference(page);
@@ -68,17 +57,15 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
         key = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
         ptr = ref Unsafe.Add(ref ptr, meta.KeyLength);
 
-        valuePayloadOffset = meta.PageOffset + meta.KeyLength;
+        valuePageOffset = meta.PageOffset + meta.KeyLength;
         valueLength = meta.ValueLength;
-
-        nextIndex = index + 1 < entryCount ?  index + 1 : null;
     }
 
     public bool TryFindValue(
         scoped ReadOnlySpan<byte> key,
         IKeyComparer keyComparer,
         out int valueOffset,
-        out int valueLength)
+        out ushort valueLength)
     {
         if (TrySearch(key, SearchOperator.Equal, keyComparer, out var index))
         {

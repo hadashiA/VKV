@@ -10,6 +10,17 @@ enum NodeKind : byte
     Internal = 1,
 }
 
+static class NodeHeaderExtensions
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NodeHeader GetNodeHeader(this IPageEntry page) =>
+        NodeHeader.Parse(page.Memory.Span);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int GetEntryCount(this IPageEntry page) =>
+        NodeHeader.ParseEntryCount(page.Memory.Span);
+}
+
 /// <summary>
 ///
 /// </summary>
@@ -53,4 +64,13 @@ unsafe struct NodeHeader
     {
         return Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(page));
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int ParseEntryCount(ReadOnlySpan<byte> page)
+    {
+        return Unsafe.ReadUnaligned<int>(
+            ref Unsafe.Add(
+                ref MemoryMarshal.GetReference(page), 4));
+    }
 }
+

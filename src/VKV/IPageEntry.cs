@@ -1,11 +1,14 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using VKV.BTree;
 
 namespace VKV;
 
 public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
 {
     public IPageEntry Page => entry;
+    public int Start => start;
     public int Length => length;
 
     public ReadOnlySpan<byte> Span
@@ -31,4 +34,7 @@ public interface IPageEntry
     public PageNumber PageNumber { get; }
     public ReadOnlyMemory<byte> Memory { get; }
     public void Release();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref byte GetReference() => ref MemoryMarshal.GetReference(Memory.Span);
 }

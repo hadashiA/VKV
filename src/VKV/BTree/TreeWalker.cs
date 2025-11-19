@@ -175,26 +175,21 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(span, header.EntryCount);
-                while (true)
+                while (index < header.EntryCount)
                 {
-                    leafNode.GetAt(index, out var key, out _, out _, out var nextIndex);
-                    count++;
+                    leafNode.GetAt(index, out var key, out _);
 
                     // check end key
                     if (endKey.HasValue)
                     {
                         var compared = keyComparer.Compare(key, endKey.Value.Span);
-                        if (endKeyExclusive)
+                        if (compared > 0 || (!endKeyExclusive && compared == 0))
                         {
-                            if (compared > 0) return count;
-                        }
-                        else
-                        {
-                            if (compared >= 0) return count;
+                            return count;
                         }
                     }
-                    if (!nextIndex.HasValue) break;
-                    index = nextIndex.Value;
+                    count++;
+                    index++;
                 }
 
                 // next node
@@ -265,32 +260,25 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                while (true)
+                while (index < header.EntryCount)
                 {
                     leafNode.GetAt(
                         index,
                         out var key,
-                        out var valuePayloadOffset,
-                        out var valueLength,
-                        out var nextIndex);
-                    result.Add(new PageSlice(page, Unsafe.SizeOf<NodeHeader>() + valuePayloadOffset, valueLength));
+                        out var valuePageOffset,
+                        out var valueLength );
+                    result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
                     if (endKey.HasValue)
                     {
                         var compared = keyComparer.Compare(key, endKey.Value.Span);
-                        if (endKeyExclusive)
+                        if (compared > 0 || (!endKeyExclusive && compared == 0))
                         {
-                            if (compared > 0) return result;
-                        }
-                        else
-                        {
-                            if (compared >= 0) return result;
+                            return result;
                         }
                     }
-
-                    if (!nextIndex.HasValue) break;
-                    index = nextIndex.Value;
+                    index++;
                 }
 
                 // next node
