@@ -34,21 +34,6 @@ public struct RangeIterator :
     bool endKeyExclusive;
     CancellationToken cancellationToken;
 
-    public RangeIterator GetAsyncEnumerator(CancellationToken cancellationToken)
-    {
-        this.cancellationToken = cancellationToken;
-        return this;
-    }
-
-    public RangeIterator GetEnumerator() => this;
-
-    IAsyncEnumerator<ReadOnlyMemory<byte>> IAsyncEnumerable<ReadOnlyMemory<byte>>.GetAsyncEnumerator(
-        CancellationToken cancellationToken) =>
-        GetAsyncEnumerator(cancellationToken);
-
-    IEnumerator<ReadOnlyMemory<byte>> IEnumerable<ReadOnlyMemory<byte>>.GetEnumerator() => GetEnumerator();
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
     internal RangeIterator(
         PageCache pageCache,
         IPageEntry startPage,
@@ -69,6 +54,20 @@ public struct RangeIterator :
         this.endKeyExclusive = endKeyExclusive;
     }
 
+    public RangeIterator GetAsyncEnumerator(CancellationToken cancellationToken)
+    {
+        this.cancellationToken = cancellationToken;
+        return this;
+    }
+
+    public RangeIterator GetEnumerator() => this;
+
+    IAsyncEnumerator<ReadOnlyMemory<byte>> IAsyncEnumerable<ReadOnlyMemory<byte>>.GetAsyncEnumerator(
+        CancellationToken cancellationToken) =>
+        GetAsyncEnumerator(cancellationToken);
+
+    IEnumerator<ReadOnlyMemory<byte>> IEnumerable<ReadOnlyMemory<byte>>.GetEnumerator() => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     public void Dispose()
     {
         currentNodeEntryCount = -2;
