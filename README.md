@@ -31,7 +31,8 @@ VKV is a red-only embedded B+Tree based key/value database, implemented pure C#.
   - Read values by key prefix
   - C# Driect Serialization
   - Multiple table JOINs
-  - Full scan
+  - Full scan (RangeIterator)
+  - Cli tools
 
 ## Why read-only ?
 
