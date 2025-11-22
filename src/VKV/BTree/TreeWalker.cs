@@ -69,41 +69,6 @@ class TreeWalker
         return Get(keyBuffer);
     }
 
-    //
-    // public RangeIterator GetIterator(
-    //     ReadOnlyMemory<byte>? startKey,
-    //     ReadOnlyMemory<byte>? endKey,
-    //     bool startKeyExclusive = false,
-    //     bool endKeyExclusive = false)
-    // {
-    //     ValidateRange(startKey, endKey);
-    //
-    //
-    //     // find start position
-    //     PageNumber? nextPage = RootPageNumber;
-    //     int index;
-    //     if (startKey.HasValue)
-    //     {
-    //         while (!TrySearch(
-    //                    nextPage.va,
-    //                    startKey.Value.Span,
-    //                    startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-    //                    out index,
-    //                    out var nextPage))
-    //         {
-    //             if (!nextPage.HasValue) return RangeIterator.Empty;
-    //
-    //             PageCache.Load(startPage);
-    //             pageNumber = nextPage.Value;
-    //         }
-    //     }
-    //     return new RangeIterator(
-    //         PageCache,
-    //
-    //         )
-    //
-    // }
-
     public async ValueTask<SingleValueResult> GetAsync(ReadOnlyMemory<byte> key, CancellationToken cancellationToken = default)
     {
         PageSlice resultValue;
@@ -322,6 +287,7 @@ class TreeWalker
                     next = null;
                     return false;
                 }
+                page.Release();
             }
             else // Leaf
             {
@@ -338,7 +304,6 @@ class TreeWalker
                 value = default;
                 return false;
             }
-            page.Release();
         }
     }
 
@@ -378,6 +343,7 @@ class TreeWalker
                     nextPageNumber = null;
                     return false;
                 }
+                page.Release();
             }
             else // Leaf
             {
@@ -392,9 +358,12 @@ class TreeWalker
                 index = default;
                 return false;
             }
-            page.Release();
         }
     }
+
+    // internal bool TryFindMinimumPosition()
+    // {
+    // }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void ValidateRange(ReadOnlyMemory<byte>? start, ReadOnlyMemory<byte>? end)

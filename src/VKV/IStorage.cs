@@ -10,8 +10,6 @@ public readonly record struct PageNumber(long Value)
     public static PageNumber Empty => new(-1);
 
     public bool IsEmpty => Value == -1;
-
-    public PageNumber Add(long offset) => new(Value + offset);
 }
 
 public interface IStorage : IDisposable

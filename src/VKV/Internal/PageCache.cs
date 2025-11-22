@@ -7,20 +7,32 @@ using System.Threading.Tasks;
 
 namespace VKV.Internal;
 
+/// <summary>
+/// Page cache (S3-FIFO)
+/// </summary>
 public sealed class PageCache : IDisposable
 {
+    enum QueueTag : byte
+    {
+        None,
+        S,
+        M
+    }
+
     class Entry : IPageEntry
     {
-        public PageNumber PageNumber { get; set; }
-        public IMemoryOwner<byte>? Buffer { get; set; }
+        public required PageNumber PageNumber { get; init; }
+        public required IMemoryOwner<byte>? Buffer { get; init; }
+        public QueueTag Tag { get; set; }
+
+        public int RefCount;
+        public int Frequency;
+
         public ReadOnlyMemory<byte> Memory
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Buffer!.Memory;
         }
-
-        public int RefCount;
-        public long LastAccess;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Retain()
@@ -38,47 +50,80 @@ public sealed class PageCache : IDisposable
         }
     }
 
+    // readonly ConcurrentDictionary<PageNumber, Entry> entries = new();
+    readonly ConcurrentDictionary<PageNumber, Entry> map;
+    readonly ConcurrentDictionary<PageNumber, byte> ghost;
 
-#if NET9_0_OR_GREATER
-    readonly Lock gate = new();
-#else
-    readonly object gate = new();
-#endif
+    readonly MpscRingQueue<Entry> sQueue;
+    readonly MpscRingQueue<Entry> mQueue;
 
-    readonly ConcurrentDictionary<PageNumber, Entry> entries = new();
     readonly IStorage storage;
     readonly int capacity;
-    long globalClock;
+    readonly int sTargetSize;
+    readonly int mTargetSize;
 
+    int approxSSize;
+    int approxMSize;
+    int evicting; // 0 or 1
     bool disposed;
 
-    internal PageCache(IStorage storage, int capacity)
+    internal PageCache(
+        IStorage storage,
+        int capacity,
+        double smallFraction = 0.1,
+        double ghostFraction = 1.0)
     {
         this.storage = storage;
         this.capacity = capacity;
+
+        sTargetSize = Math.Max(1, (int)(capacity * smallFraction));
+        mTargetSize = capacity - sTargetSize;
+
+        map = new ConcurrentDictionary<PageNumber, Entry>(
+            Environment.ProcessorCount,
+            capacity);
+
+        ghost = new ConcurrentDictionary<PageNumber, byte>(
+            Environment.ProcessorCount,
+            (int)(mTargetSize * ghostFraction));
+
+        // FIFO キュー容量は適当に 2 の冪に丸める
+        var fifoCap = 1;
+        while (fifoCap < capacity) fifoCap <<= 1;
+
+        sQueue = new MpscRingQueue<Entry>(fifoCap);
+        mQueue = new MpscRingQueue<Entry>(fifoCap);
     }
 
     public void Dispose()
     {
-        lock (gate)
+        lock (map)
         {
             if (disposed) return;
 
-            foreach (var t in entries)
+            foreach (var t in map.Values)
             {
-                t.Value.Release();
+                t.Release();
             }
-            entries.Clear();
             disposed = true;
         }
     }
 
     public bool TryGet(PageNumber pageNumber, out IPageEntry page)
     {
-        if (entries.TryGetValue(pageNumber, out var entry))
+        if (map.TryGetValue(pageNumber, out var entry))
         {
+            // freq++（max: 3）
+            while (true)
+            {
+                var frequency = entry.Frequency;
+                if (frequency >= 3) break;
+                if (Interlocked.CompareExchange(ref entry.Frequency, frequency + 1, frequency) == frequency)
+                {
+                    break;
+                }
+            }
             entry.Retain();
-            entry.LastAccess = Interlocked.Increment(ref globalClock);
             page = entry;
             return true;
         }
@@ -101,55 +146,162 @@ public sealed class PageCache : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void AddEntry(PageNumber pageNumber, IMemoryOwner<byte> buffer)
     {
-        var newEntry = new Entry
+        var entry = new Entry
         {
             PageNumber = pageNumber,
             Buffer = buffer,
-            RefCount = 1,
-            LastAccess = Interlocked.Increment(ref globalClock)
+            Frequency = 0,
+            Tag = QueueTag.None
         };
-        if (!entries.TryAdd(pageNumber, newEntry))
+
+        if (!map.TryAdd(pageNumber, entry))
         {
-            // already exists
+            // race
             return;
         }
 
-        if (entries.Count > capacity)
+        var inGhost = ghost.ContainsKey(pageNumber);
+        entry.Tag = inGhost ? QueueTag.M : QueueTag.S;
+
+        if (inGhost)
         {
-            EvictOne();
+            // Resurrected from Ghost -> to M Queue
+            ghost.TryRemove(pageNumber, out _);
+            if (mQueue.TryEnqueue(entry))
+            {
+                Interlocked.Increment(ref approxMSize);
+            }
+        }
+        else
+        {
+            // New → S queue
+            if (sQueue.TryEnqueue(entry))
+            {
+                Interlocked.Increment(ref approxSSize);
+            }
+        }
+
+        // Try triggering an eviction if the capacity seems to be exceeded.
+        if (map.Count > capacity)
+        {
+            TryStartEvict();
+        }
+    }
+
+    void TryStartEvict()
+    {
+        // evict with only one thread at a time
+        if (Interlocked.CompareExchange(ref evicting, 1, 0) != 0)
+            return;
+
+        try
+        {
+            while (map.Count > capacity)
+            {
+                EvictOne();
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref evicting, 0);
         }
     }
 
     void EvictOne()
     {
-        var minStamp = long.MaxValue;
-        PageNumber? victimKey = null;
-        foreach (var (key, e) in entries)
+        // If the approximate size of S is greater than the target, prioritize S; otherwise, prioritize M.
+        if (Volatile.Read(ref approxSSize) >= sTargetSize)
         {
-            if (e.RefCount <= 1 && e.LastAccess < minStamp)
+            if (!EvictFromS())
             {
-                minStamp = e.LastAccess;
-                victimKey = key;
-            }
-        }
-
-        if (victimKey.HasValue)
-        {
-            if (entries.TryRemove(victimKey.Value, out var victim))
-            {
-                victim.Release();
+                EvictFromM();
             }
         }
         else
         {
-            foreach (var kv in entries)
+            if (!EvictFromM())
             {
-                if (entries.TryRemove(kv.Key, out var victim2))
+                EvictFromS();
+            }
+        }
+    }
+
+    bool EvictFromS()
+    {
+        while (sQueue.TryDequeue(out var e))
+        {
+            // Skip if it's already removed from the map or moved to S.
+            if (!map.TryGetValue(e.PageNumber, out var current) ||
+                current != e ||
+                current.Tag != QueueTag.S)
+            {
+                continue;
+            }
+
+            Interlocked.Decrement(ref approxSSize);
+
+            // If freq > 1, promote to M.
+            if (Volatile.Read(ref current.Frequency) > 1)
+            {
+                current.Frequency = 0;
+                current.Tag = QueueTag.M;
+                if (mQueue.TryEnqueue(current))
+                    Interlocked.Increment(ref approxMSize);
+
+                // There might be an overflow of M, so EvictFromM if necessary.
+                if (Volatile.Read(ref approxMSize) > mTargetSize)
+                    EvictFromM();
+
+                return true;
+            }
+
+            // Send to ghost
+            map.TryRemove(current.PageNumber, out _);
+            if (ghost.Count > mTargetSize)
+            {
+                // Approximate by discarding one element
+                foreach (var k in ghost.Keys)
                 {
-                    victim2.Release();
+                    ghost.TryRemove(k, out _);
                     break;
                 }
             }
+            ghost.TryAdd(current.PageNumber, 0);
+            return true;
         }
+
+        return false;
+    }
+
+    bool EvictFromM()
+    {
+        while (mQueue.TryDequeue(out var e))
+        {
+            if (!map.TryGetValue(e.PageNumber, out var current) ||
+                current != e ||
+                current.Tag != QueueTag.M)
+            {
+                continue;
+            }
+
+            Interlocked.Decrement(ref approxMSize);
+
+            var f = Volatile.Read(ref current.Frequency);
+            if (f > 0)
+            {
+                // Second chance: re-insert after increasing frequency
+                Interlocked.Decrement(ref current.Frequency);
+                if (mQueue.TryEnqueue(current))
+                {
+                    Interlocked.Increment(ref approxMSize);
+                }
+                return true;
+            }
+            // Complete expulsion (not into ghosting here)
+            map.TryRemove(current.PageNumber, out _);
+            return true;
+        }
+
+        return false;
     }
 }

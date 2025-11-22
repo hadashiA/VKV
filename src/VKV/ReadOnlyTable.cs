@@ -61,7 +61,6 @@ public class ReadOnlyTable
         ReadOnlyMemory<byte>? endKey,
         bool startKeyExclusive = false,
         bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending,
         CancellationToken cancellationToken = default)
     {
         return primaryKeyTree.GetRangeAsync(
@@ -69,7 +68,6 @@ public class ReadOnlyTable
             endKey,
             startKeyExclusive,
             endKeyExclusive,
-            sortOrder,
             cancellationToken);
     }
 
