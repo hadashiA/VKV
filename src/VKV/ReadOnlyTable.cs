@@ -68,7 +68,7 @@ public class ReadOnlyTable
             endKey,
             startKeyExclusive,
             endKeyExclusive,
-            cancellationToken);
+            cancellationToken: cancellationToken);
     }
 
 

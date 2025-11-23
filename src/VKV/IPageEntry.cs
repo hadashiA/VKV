@@ -1,15 +1,14 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using VKV.BTree;
 
 namespace VKV;
 
-public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
+public readonly struct PageSlice(IPageEntry entry, int start, ushort length) : IDisposable
 {
     public IPageEntry Page => entry;
     public int Start => start;
-    public int Length => length;
+    public ushort Length => length;
 
     public ReadOnlySpan<byte> Span
     {

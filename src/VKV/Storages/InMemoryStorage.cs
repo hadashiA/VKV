@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Threading;
 using System.Threading.Tasks;
+using VKV.BTree;
 
 namespace VKV.Storages;
 
@@ -15,16 +16,24 @@ public class InMemoryStorage(Memory<byte> memory, int pageSize) : IStorage
 
     public ValueTask<IMemoryOwner<byte>> ReadPageAsync(PageNumber pageNumber, CancellationToken cancellationToken = default)
     {
-        var destination = MemoryPool<byte>.Shared.Rent(PageSize);
-        var length = (int)Math.Min(PageSize, memory.Length - pageNumber.Value);
-        memory.Slice((int)pageNumber.Value, length).CopyTo(destination.Memory);
+        var header = NodeHeader.Parse(memory.Span[(int)pageNumber.Value..]);
+        var nodeLength = header.NodeLength;
+
+        var destination = MemoryPool<byte>.Shared.Rent(nodeLength);
+        memory.Slice((int)pageNumber.Value, nodeLength)
+            .CopyTo(destination.Memory);
         return new ValueTask<IMemoryOwner<byte>>(destination);
     }
 
     public IMemoryOwner<byte> ReadPage(PageNumber pageNumber)
     {
-        var destination = MemoryPool<byte>.Shared.Rent(PageSize);
-        memory.Span.Slice((int)pageNumber.Value, PageSize).CopyTo(destination.Memory.Span);
+        var header = NodeHeader.Parse(memory.Span[(int)pageNumber.Value..]);
+        var nodeLength = header.NodeLength;
+
+        var destination = MemoryPool<byte>.Shared.Rent(nodeLength);
+
+        memory.Span.Slice((int)pageNumber.Value, nodeLength)
+            .CopyTo(destination.Memory.Span);
         return destination;
     }
 }

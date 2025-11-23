@@ -1,8 +1,11 @@
+using System;
 using System.Buffers;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
+using VKV.BTree;
 
 namespace VKV.Storages;
 
@@ -14,14 +17,42 @@ public sealed class PreadStorage(SafeFileHandle handle, int pageSize = 4096) : I
 
     public async ValueTask<IMemoryOwner<byte>> ReadPageAsync(PageNumber pageNumber, CancellationToken cancellationToken = default)
     {
-        var destination = MemoryPool<byte>.Shared.Rent(pageSize);
+        var headerLength = Unsafe.SizeOf<NodeHeader>();
         var bytesRead = 0;
-        while (bytesRead < PageSize)
+        int nodeLength;
+        using (var buffer = MemoryPool<byte>.Shared.Rent(Unsafe.SizeOf<NodeHeader>()))
         {
-            var n = await RandomAccess.ReadAsync(handle, destination.Memory[bytesRead..], pageNumber.Value + bytesRead, cancellationToken);
+            while (bytesRead < headerLength)
+            {
+                var n = await RandomAccess.ReadAsync(
+                    handle,
+                    buffer.Memory[bytesRead..(headerLength - bytesRead)],
+                    pageNumber.Value + bytesRead,
+                    cancellationToken);
+                if (n == 0)
+                {
+                    throw new EndOfStreamException();
+                }
+                bytesRead += n;
+            }
+
+            var header = NodeHeader.Parse(buffer.Memory.Span);
+            nodeLength = header.NodeLength;
+        }
+
+        bytesRead = 0;
+        var destination = MemoryPool<byte>.Shared.Rent(nodeLength);
+        while (bytesRead < nodeLength)
+        {
+            var buffer = destination.Memory[bytesRead..(nodeLength - bytesRead)];
+            var n = await RandomAccess.ReadAsync(
+                handle,
+                buffer,
+                pageNumber.Value + bytesRead,
+                cancellationToken);
             if (n == 0)
             {
-                return destination;
+                throw new EndOfStreamException();
             }
             bytesRead += n;
         }
@@ -30,17 +61,38 @@ public sealed class PreadStorage(SafeFileHandle handle, int pageSize = 4096) : I
 
     public IMemoryOwner<byte> ReadPage(PageNumber pageNumber)
     {
-        var destination = MemoryPool<byte>.Shared.Rent(pageSize);
+        var headerLength = Unsafe.SizeOf<NodeHeader>();
+        Span<byte> headerBuffer = stackalloc byte[headerLength];
+
         var bytesRead = 0;
-        while (bytesRead < PageSize)
+        while (bytesRead < headerLength)
         {
             var n = RandomAccess.Read(
                 handle,
-                destination.Memory.Span[bytesRead..],
+                headerBuffer[bytesRead..(headerLength - bytesRead)],
                 pageNumber.Value + bytesRead);
             if (n == 0)
             {
-                return destination;
+                throw new EndOfStreamException();
+            }
+            bytesRead += n;
+        }
+
+        var header = NodeHeader.Parse(headerBuffer);
+        var nodeLength = header.NodeLength;
+
+        bytesRead = 0;
+        var destination = MemoryPool<byte>.Shared.Rent(nodeLength);
+        while (bytesRead < nodeLength)
+        {
+            var buffer = destination.Memory[bytesRead..(nodeLength - bytesRead)];
+            var n = RandomAccess.Read(
+                handle,
+                buffer.Span,
+                pageNumber.Value + bytesRead);
+            if (n == 0)
+            {
+                throw new EndOfStreamException();
             }
             bytesRead += n;
         }

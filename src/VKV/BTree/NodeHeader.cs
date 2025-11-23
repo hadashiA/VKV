@@ -30,7 +30,7 @@ static class NodeHeaderExtensions
 [StructLayout(LayoutKind.Explicit, Pack = 1)]
 unsafe struct NodeHeader
 {
-    public static readonly int Size = Unsafe.SizeOf<NodeHeader>();
+    public int NodeLength => Unsafe.SizeOf<NodeHeader>() + PayloadLength;
 
     [FieldOffset(0)]
     public NodeKind Kind;

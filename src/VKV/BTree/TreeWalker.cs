@@ -86,11 +86,15 @@ class TreeWalker
         return new SingleValueResult(resultValue, true);
     }
 
+    public RangeIterator GetIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
+        new(this, iteratorDirection);
+
     public async ValueTask<RangeResult> GetRangeAsync(
         ReadOnlyMemory<byte>? startKey,
         ReadOnlyMemory<byte>? endKey,
         bool startKeyExclusive = false,
         bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending,
         CancellationToken cancellationToken = default)
     {
         ValidateRange(startKey, endKey);
@@ -361,9 +365,79 @@ class TreeWalker
         }
     }
 
-    // internal bool TryFindMinimumPosition()
-    // {
-    // }
+    internal SingleValueResult GetMinValue()
+    {
+        var pageNumber = RootPageNumber;
+        while (true)
+        {
+            IPageEntry page;
+            while (!PageCache.TryGet(pageNumber, out page))
+            {
+                PageCache.Load(pageNumber);
+            }
+
+            var pageSpan = page.Memory.Span;
+            var header = NodeHeader.Parse(pageSpan);
+            if (header.Kind == NodeKind.Internal)
+            {
+                if (header.EntryCount <= 0)
+                {
+                    return SingleValueResult.Empty;
+                }
+                var internalNode = new InternalNodeReader(pageSpan, header.EntryCount);
+                internalNode.GetAt(0, out _, out pageNumber);
+                page.Release();
+            }
+            else // Leaf
+            {
+                if (header.EntryCount <= 0)
+                {
+                    return SingleValueResult.Empty;
+                }
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
+                leafNode.GetAt(0, out _, out var valuePageOffset, out var valueLength);
+                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
+                return new SingleValueResult(pageSlice, true);
+            }
+        }
+    }
+
+    internal SingleValueResult GetMaxValue()
+    {
+        var pageNumber = RootPageNumber;
+        while (true)
+        {
+            IPageEntry page;
+            while (!PageCache.TryGet(pageNumber, out page))
+            {
+                PageCache.Load(pageNumber);
+            }
+
+            var pageSpan = page.Memory.Span;
+            var header = NodeHeader.Parse(pageSpan);
+            if (header.Kind == NodeKind.Internal)
+            {
+                if (header.EntryCount <= 0)
+                {
+                    return SingleValueResult.Empty;
+                }
+                var internalNode = new InternalNodeReader(pageSpan, header.EntryCount);
+                internalNode.GetAt(header.EntryCount - 1, out _, out pageNumber);
+                page.Release();
+            }
+            else // Leaf
+            {
+                if (header.EntryCount <= 0)
+                {
+                    return SingleValueResult.Empty;
+                }
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
+                leafNode.GetAt(header.EntryCount - 1, out _, out var valuePageOffset, out var valueLength);
+                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
+                return new SingleValueResult(pageSlice, true);
+            }
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void ValidateRange(ReadOnlyMemory<byte>? start, ReadOnlyMemory<byte>? end)

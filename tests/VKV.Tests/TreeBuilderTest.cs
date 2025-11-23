@@ -68,7 +68,7 @@ public class TreeBuilderTest
         Assert.That(internalKey1.SequenceEqual("key01"u8), Is.True);
         Assert.That(internalKey2.SequenceEqual("key06"u8), Is.True);
 
-        header = NodeHeader.Parse(result.AsSpan((int)childPosition1));
+        header = NodeHeader.Parse(result.AsSpan((int)childPosition1.Value));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Leaf));
         Assert.That(header.EntryCount, Is.EqualTo(5));
         Assert.That(header.LeftSiblingPageNumber.IsEmpty, Is.True);

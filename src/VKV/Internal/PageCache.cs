@@ -151,7 +151,8 @@ public sealed class PageCache : IDisposable
             PageNumber = pageNumber,
             Buffer = buffer,
             Frequency = 0,
-            Tag = QueueTag.None
+            Tag = QueueTag.None,
+            RefCount = 1
         };
 
         if (!map.TryAdd(pageNumber, entry))
@@ -246,17 +247,23 @@ public sealed class PageCache : IDisposable
                 current.Frequency = 0;
                 current.Tag = QueueTag.M;
                 if (mQueue.TryEnqueue(current))
+                {
                     Interlocked.Increment(ref approxMSize);
+                }
 
                 // There might be an overflow of M, so EvictFromM if necessary.
                 if (Volatile.Read(ref approxMSize) > mTargetSize)
+                {
                     EvictFromM();
-
+                }
                 return true;
             }
 
             // Send to ghost
-            map.TryRemove(current.PageNumber, out _);
+            if (map.TryRemove(current.PageNumber, out _))
+            {
+                current.Release();
+            }
             if (ghost.Count > mTargetSize)
             {
                 // Approximate by discarding one element
@@ -298,7 +305,10 @@ public sealed class PageCache : IDisposable
                 return true;
             }
             // Complete expulsion (not into ghosting here)
-            map.TryRemove(current.PageNumber, out _);
+            if (map.TryRemove(current.PageNumber, out _))
+            {
+                e.Release();
+            }
             return true;
         }
 

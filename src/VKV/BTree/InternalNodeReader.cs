@@ -30,7 +30,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
 #endif
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void GetAt(int index, out ReadOnlySpan<byte> key, out long childPosition)
+    public void GetAt(int index, out ReadOnlySpan<byte> key, out PageNumber childPageNumber)
     {
         var meta = GetMeta(index);
         ref var ptr = ref Unsafe.Add(
@@ -44,7 +44,8 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
         key = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
         ptr = ref Unsafe.Add(ref ptr, meta.KeyLength);
 
-        childPosition = Unsafe.ReadUnaligned<long>(ref ptr);
+        var childPosition = Unsafe.ReadUnaligned<long>(ref ptr);
+        childPageNumber = new PageNumber(childPosition);
     }
 
     public bool TrySearch(ReadOnlySpan<byte> key, IKeyComparer keyComparer, out PageNumber childPageNumber)
