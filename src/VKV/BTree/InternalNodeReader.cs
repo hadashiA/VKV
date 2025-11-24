@@ -141,7 +141,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
 #else
             ref pageReference,
 #endif
-            Unsafe.SizeOf<NodeHeader>() + index * Unsafe.SizeOf<NodeEntryMeta>());
+            sizeof(int) + Unsafe.SizeOf<NodeHeader>() + index * Unsafe.SizeOf<NodeEntryMeta>());
         return Unsafe.ReadUnaligned<NodeEntryMeta>(ref ptr);
     }
 }

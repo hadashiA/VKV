@@ -30,8 +30,6 @@ static class NodeHeaderExtensions
 [StructLayout(LayoutKind.Explicit, Pack = 1)]
 unsafe struct NodeHeader
 {
-    public int NodeLength => Unsafe.SizeOf<NodeHeader>() + PayloadLength;
-
     [FieldOffset(0)]
     public NodeKind Kind;
 
@@ -42,27 +40,22 @@ unsafe struct NodeHeader
     public int EntryCount;
 
     [FieldOffset(8)]
-    public fixed byte PayloadLengthBytes[4];
-
-    [FieldOffset(8)]
-    public int PayloadLength;
-
-    [FieldOffset(12)]
     public fixed byte LeftSiblingPositionBytes[8];
 
-    [FieldOffset(12)]
+    [FieldOffset(8)]
     public PageNumber LeftSiblingPageNumber;
 
-    [FieldOffset(20)]
+    [FieldOffset(16)]
     public fixed byte RightSiblingPageNumberBytes[8];
 
-    [FieldOffset(20)]
+    [FieldOffset(16)]
     public PageNumber RightSiblingPageNumber;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static NodeHeader Parse(ReadOnlySpan<byte> page)
     {
-        return Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(page));
+        return Unsafe.ReadUnaligned<NodeHeader>(
+            ref Unsafe.Add(ref MemoryMarshal.GetReference(page), sizeof(int)));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -70,7 +63,7 @@ unsafe struct NodeHeader
     {
         return Unsafe.ReadUnaligned<int>(
             ref Unsafe.Add(
-                ref MemoryMarshal.GetReference(page), 4));
+                ref MemoryMarshal.GetReference(page), 8));
     }
 }
 

@@ -30,14 +30,15 @@ namespace VKV;
 //         key_encoding(1): enum
 //         value_kind(1): enum
 //         root_position(8): long
-//     index_count(4): int
+//     index_count(2): ushort
 //     Index[1](Secondary Key):
 //         ...
 //  Table[1]:
 //     ...
 //
-// Pages
-//   ...
+// Page[0]
+//   page_length(4): int
+//   payload...
 
 // NOTE: little endian only
 [StructLayout(LayoutKind.Explicit)]
@@ -67,7 +68,7 @@ unsafe struct Header
     public fixed byte TableCountBytes[2];
 
     [FieldOffset(12)]
-    public int TableCount;
+    public ushort TableCount;
 
     public bool ValidateMagicBytes()
     {
@@ -147,18 +148,18 @@ static class CatalogParser
 
         var primaryKeyDescriptor = await ParseIndexDescriptorAsync(stream, cancellationToken);
 
-        int indexCount;
-        buffer = ArrayPool<byte>.Shared.Rent(sizeof(int));
+        ushort indexCount;
+        buffer = ArrayPool<byte>.Shared.Rent(sizeof(ushort));
         try
         {
-            bytesRead = await stream.ReadAtLeastAsync(buffer, sizeof(int), cancellationToken: cancellationToken);
-            indexCount = BinaryPrimitives.ReadInt32LittleEndian(buffer);
+            bytesRead = await stream.ReadAtLeastAsync(buffer, sizeof(ushort), cancellationToken: cancellationToken);
+            indexCount = BinaryPrimitives.ReadUInt16LittleEndian(buffer);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-        stream.Seek(-(bytesRead - sizeof(int)), SeekOrigin.Current);
+        stream.Seek(-(bytesRead - sizeof(ushort)), SeekOrigin.Current);
 
         var indexDescriptors = new IndexDescriptor[indexCount];
         for (var i = 0; i < indexCount; i++)

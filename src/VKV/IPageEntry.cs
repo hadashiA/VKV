@@ -35,5 +35,8 @@ public interface IPageEntry
     public void Release();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetLength() => Unsafe.ReadUnaligned<int>(ref GetReference());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref byte GetReference() => ref MemoryMarshal.GetReference(Memory.Span);
 }

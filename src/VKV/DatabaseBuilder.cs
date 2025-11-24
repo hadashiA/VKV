@@ -121,24 +121,78 @@ public class TableBuilder
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        // build primary key index
-        await WriteIndexAsync(
-            stream,
-            GetPrimaryKeyIndexOptions(),
-            keyValues,
-            cancellationToken);
+        var descriptorEndPositions = new List<long>();
 
-        // build secondary indices
+        // build primary index descriptor
+        await WriteIndexDescriptorAsync(stream, GetPrimaryKeyIndexOptions(), cancellationToken);
+        descriptorEndPositions.Add(stream.Position);
+
+        // build secondary index length
+        Span<byte> indexCountBuffer = stackalloc byte[sizeof(ushort)];
+        BinaryPrimitives.WriteUInt16LittleEndian(indexCountBuffer, (ushort)SecondaryIndexOptions.Count);
+        stream.Write(indexCountBuffer[..sizeof(ushort)]);
+
+        // build secondary index descriptors
         foreach (var indexOptions in SecondaryIndexOptions)
         {
+            await WriteIndexDescriptorAsync(stream, indexOptions, cancellationToken);
+            descriptorEndPositions.Add(stream.Position);
+        }
+
+        // write primary tree
+        var rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
+
+        // write primary tree root position
+        Span<byte> positionBuffer = stackalloc byte[sizeof(long)];
+        stream.Seek(descriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
+        BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, rootPosition.Value);
+        stream.Write(positionBuffer);
+
+        // write secondary tree root positions
+        for (var i = 0; i < SecondaryIndexOptions.Count; i++)
+        {
+            var indexOptions = SecondaryIndexOptions[i];
             var indexToPrimaryKeyPairs = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
             foreach (var (k, v) in keyValues)
             {
                 var index = indexOptions.ValueToIndexFactory.Invoke(v);
                 indexToPrimaryKeyPairs.Add(index, k);
             }
-            await WriteIndexAsync(stream, indexOptions, indexToPrimaryKeyPairs, cancellationToken);
+
+            // write primary tree
+            rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, indexToPrimaryKeyPairs, pageFilters, cancellationToken);
+
+            // write primary tree root position
+            Span<byte> positionBuffer2 = stackalloc byte[sizeof(long)];
+            stream.Seek(descriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
+            BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, rootPosition.Value);
+            stream.Write(positionBuffer2);
         }
+    }
+
+    async ValueTask WriteIndexDescriptorAsync(
+        Stream stream,
+        IndexOptions indexOptions,
+        CancellationToken cancellationToken = default)
+    {
+        var indexNameUtf8 = Encoding.UTF8.GetBytes(indexOptions.Name);
+        var descriptorLength = sizeof(int) + indexNameUtf8.Length + 1 + 1 + 1 + sizeof(long);
+
+        var buffer = ArrayPool<byte>.Shared.Rent(descriptorLength);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, indexNameUtf8.Length);
+
+        var offset = sizeof(int);
+        indexNameUtf8.CopyTo(buffer.AsSpan(offset));
+        offset += indexNameUtf8.Length;
+
+        buffer[offset++] = (byte)(indexOptions.IsUnique ? 1 : 0);
+        buffer[offset++] = (byte)indexOptions.KeyEncoding;
+        buffer[offset++] = (byte)indexOptions.ValueKind;
+
+        var payloadPosition = stream.Position + descriptorLength;
+        BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(offset), payloadPosition);
+
+        await stream.WriteAsync(buffer.AsMemory(0, descriptorLength), cancellationToken);
     }
 
     async ValueTask WriteIndexAsync(
@@ -229,7 +283,7 @@ public class DatabaseBuilder : IDisposable
         header.MajorVersion = 1;
         header.MinorVersion = 0;
         header.PageSize = PageSize;
-        header.TableCount = tableBuilders.Count;
+        header.TableCount = (ushort)tableBuilders.Count;
 
         Span<byte> headerBytes = stackalloc byte[Unsafe.SizeOf<Header>()];
         Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(headerBytes), header);

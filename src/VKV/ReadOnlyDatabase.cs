@@ -17,12 +17,12 @@ public record DatabaseLoadOptions
     {
         if (stream is FileStream fs)
         {
-            return new PreadStorage(fs.SafeFileHandle, pageSize);
+            return new PreadStorage(fs.SafeFileHandle);
         }
 
         if (stream is MemoryStream ms)
         {
-            return new InMemoryStorage(ms.ToArray(), pageSize);
+            return new InMemoryStorage(ms.ToArray());
         }
 
         throw new NotSupportedException($"unsupported stream type: {stream.GetType().Name}");
@@ -55,11 +55,6 @@ public sealed class ReadOnlyDatabase : IDisposable
 
     ReadOnlyDatabase(Catalog catalog, IStorage storage, int pageCacheCapacity)
     {
-        if (storage.PageSize != catalog.PageSize)
-        {
-            throw new ArgumentException("PageSize mismatch");
-        }
-
         Catalog = catalog;
         this.storage = storage;
         pageCache = new PageCache(storage, pageCacheCapacity);

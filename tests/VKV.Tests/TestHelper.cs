@@ -20,7 +20,7 @@ static class TestHelper
             keyValues);
 
         var result = memoryStream.ToArray();
-        var storage = new InMemoryStorage(result.ToArray(), pageSize);
+        var storage = new InMemoryStorage(result.ToArray());
         var pageCache = new PageCache(storage, 8);
         return new TreeWalker(pos, pageCache, KeyEncoding.Ascii);
     }
