@@ -226,17 +226,20 @@ static class TreeBuilder
                              : sizeof(int) + sizeof(ushort)) +
                          node.KeyValueBufferOffset;
 
-        // write header
-        var buffer = ArrayPool<byte>.Shared.Rent(PageHeaderSize);
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, pageLength);
-        Unsafe.WriteUnaligned(
-            ref MemoryMarshal.GetReference(buffer.AsSpan(sizeof(int))),
-            header);
+        var buffer = ArrayPool<byte>.Shared.Rent(pageLength);
+        ref var ptr =
+#if NETSTANDARD
+            ref MemoryMarshal.GetReference(buffer.AsSpan());
+#else
+            ref MemoryMarshal.GetArrayDataReference(buffer);
+#endif
+        // write page header
+        Unsafe.WriteUnaligned(ref ptr, pageLength);
+        ptr = ref Unsafe.Add(ref ptr, sizeof(int));
 
-        await outStream.WriteAsync(
-            buffer.AsMemory(0, PageHeaderSize),
-            cancellationToken).ConfigureAwait(false);
-        ArrayPool<byte>.Shared.Return(buffer);
+        // write node header
+        Unsafe.WriteUnaligned(ref ptr, header);
+        ptr = ref Unsafe.Add(ref ptr, Unsafe.SizeOf<NodeHeader>());
 
         // write meta(s)
         var metaSize = header.Kind == NodeKind.Leaf
@@ -245,61 +248,65 @@ static class TreeBuilder
 
         var payloadOffset = PageHeaderSize + node.EntryCount * metaSize;
 
-        buffer =  ArrayPool<byte>.Shared.Rent(sizeof(int) + sizeof(ushort) * 2);
         foreach (var (keyLength, valueLength) in node.KeyValueSizes)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(buffer, payloadOffset);
-            var offset = sizeof(int);
+            Unsafe.WriteUnaligned(ref ptr, payloadOffset);
+            ptr = ref Unsafe.Add(ref ptr, sizeof(int));
 
-            BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), (ushort)keyLength);
-            offset += sizeof(ushort);
+            Unsafe.WriteUnaligned(ref ptr, (ushort)keyLength);
+            ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
 
             if (header.Kind == NodeKind.Leaf)
             {
                 // variable length value
-                BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), (ushort)valueLength);
-                offset += sizeof(ushort);
+                Unsafe.WriteUnaligned(ref ptr, (ushort)valueLength);
+                ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
             }
-
-            await outStream.WriteAsync(buffer.AsMemory(0, offset), cancellationToken )
-                .ConfigureAwait(false);
             payloadOffset += keyLength + valueLength;
         }
-        ArrayPool<byte>.Shared.Return(buffer);
 
         // write key/values
-        await outStream.WriteAsync(
-                node.KeyValueBuffer.AsMemory(0, node.KeyValueBufferOffset),
-                cancellationToken)
-            .ConfigureAwait(false);
-        await outStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        ref var keyValuesReference =
+#if NETSTANDARD
+            ref MemoryMarshal.GetReference(node.KeyValueBuffer.AsSpan());
+#else
+            ref MemoryMarshal.GetArrayDataReference(node.KeyValueBuffer);
+#endif
+
+        Unsafe.CopyBlockUnaligned(ref ptr, ref keyValuesReference, (uint)node.KeyValueBufferOffset);
 
         if (filters is { Count: > 0 })
         {
-            throw new NotImplementedException();
-            // var input = page;
-            // var outputBuffer = ArrayPool<byte>.Shared.Rent(input.Length);
-            // try
-            // {
-            //     foreach (var filter in filters)
-            //     {
-            //         var maxLength = filter.GetMaxEncodedLength(input.Length);
-            //         if (maxLength > outputBuffer.Length)
-            //         {
-            //             ArrayPool<byte>.Shared.Return(outputBuffer);
-            //             outputBuffer = ArrayPool<byte>.Shared.Rent(maxLength);
-            //         }
-            //
-            //         filter.Encode(input, outputBuffer);
-            //         input = outputBuffer;
-            //     }
-            //
-            //     await outStream.WriteAsync(outputBuffer.AsMemory(0, page.Length), cancellationToken).ConfigureAwait(false);
-            // }
-            // finally
-            // {
-            //     ArrayPool<byte>.Shared.Return(outputBuffer);
-            // }
+            var input = buffer;
+            var output = ArrayPool<byte>.Shared.Rent(pageLength);
+            for (var i = 0; i < filters.Count; i++)
+            {
+                var pageFilter = filters[i];
+                var maxLength = pageFilter.GetMaxEncodedLength(input.Length);
+                if (output.Length < maxLength)
+                {
+                    ArrayPool<byte>.Shared.Return(output);
+                    output = ArrayPool<byte>.Shared.Rent(maxLength);
+                }
+                pageLength = pageFilter.Encode(input.AsSpan(0, pageLength), output);
+
+                // last
+                if (i >= filters.Count - 1)
+                {
+                    await outStream.WriteAsync(output.AsMemory(0, pageLength), cancellationToken);
+                    ArrayPool<byte>.Shared.Return(output);
+                    break;
+                }
+                input = output;
+                output = buffer;
+            }
         }
+        else
+        {
+            await outStream.WriteAsync(buffer.AsMemory(0, pageLength), cancellationToken);
+        }
+        ArrayPool<byte>.Shared.Return(buffer);
+
+        await outStream.FlushAsync(cancellationToken);
     }
 }

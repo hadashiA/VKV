@@ -30,6 +30,7 @@ using (var database = await ReadOnlyDatabase.OpenFileAsync(drydbPath))
 
     while (true)
     {
+
         using var result = table.Get(123);
         // Console.WriteLine(Encoding.ASCII.GetString(result.Span));
     }
