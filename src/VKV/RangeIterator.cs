@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.BTree;
@@ -11,9 +13,20 @@ public enum IteratorDirection
     Backward
 }
 
-public struct RangeIterator
+public struct RangeIterator :
+    IEnumerable<ReadOnlyMemory<byte>>,
+    IEnumerator<ReadOnlyMemory<byte>>,
+    IAsyncEnumerable<ReadOnlyMemory<byte>>,
+    IAsyncEnumerator<ReadOnlyMemory<byte>>
 {
     public static RangeIterator Empty => new();
+
+    public void Reset()
+    {
+        throw new NotImplementedException();
+    }
+
+    object? IEnumerator.Current => Current;
 
     public ReadOnlyMemory<byte> Current =>
         currentPage!.Memory.Slice(currentValueOffset, currentValueLength);
@@ -35,6 +48,21 @@ public struct RangeIterator
         {
             throw new NotImplementedException();
         }
+    }
+
+    public RangeIterator GetEnumerator() => this;
+    IEnumerator<ReadOnlyMemory<byte>> IEnumerable<ReadOnlyMemory<byte>>.GetEnumerator() => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public RangeIterator GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
+    IAsyncEnumerator<ReadOnlyMemory<byte>> IAsyncEnumerable<ReadOnlyMemory<byte>>.GetAsyncEnumerator(
+        CancellationToken cancellationToken) =>
+        GetAsyncEnumerator(cancellationToken);
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return default;
     }
 
     public void Dispose()
@@ -150,14 +178,70 @@ public struct RangeIterator
 
         var leafNode = new LeafNodeReader(currentPage.Memory.Span, currentNodeEntryCount);
         leafNode.GetAt(currentIndex,
-            out var key,
+            out _,
             out currentValueOffset,
             out currentValueLength);
         return true;
     }
 
-    public ValueTask<bool> MoveNextAsync()
+    public async ValueTask<bool> MoveNextAsync()
     {
-        throw new NotImplementedException();
+        var pageCache = treeWalker.PageCache;
+
+        // first item
+        if (currentPage is null)
+        {
+            var minimumValue = treeWalker.GetMinValue();
+            if (!minimumValue.HasValue)
+            {
+                return false;
+            }
+
+            currentPage = minimumValue.Value.Page;
+            currentValueOffset = minimumValue.Value.Start;
+            currentValueLength = minimumValue.Value.Length;
+            currentNodeEntryCount = currentPage.GetEntryCount();
+            return true;
+        }
+
+        // tail of node
+        if (currentIndex >= currentNodeEntryCount - 1)
+        {
+            var header = currentPage.GetNodeHeader();
+            // check right node exists
+            if (header.RightSiblingPageNumber.IsEmpty)
+            {
+                return false;
+            }
+
+            currentPage.Release();
+            while (!pageCache.TryGet(header.RightSiblingPageNumber, out currentPage))
+            {
+                await treeWalker.PageCache.LoadAsync(header.RightSiblingPageNumber);
+            }
+
+            header = currentPage.GetNodeHeader();
+            currentNodeEntryCount = header.EntryCount;
+            if (header.Kind != NodeKind.Leaf)
+            {
+                throw new InvalidOperationException("Invalid node kind");
+            }
+            currentIndex = 0;
+            if (currentNodeEntryCount < 0)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            currentIndex++;
+        }
+
+        var leafNode = new LeafNodeReader(currentPage.Memory.Span, currentNodeEntryCount);
+        leafNode.GetAt(currentIndex,
+            out _,
+            out currentValueOffset,
+            out currentValueLength);
+        return true;
     }
 }
