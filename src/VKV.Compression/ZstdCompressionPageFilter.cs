@@ -5,7 +5,12 @@ namespace VKV.Compression;
 
 public class ZstdCompressionPageFilter : IPageFilter
 {
-    public string Id => "VKV.Zstd";
+    static ZstdCompressionPageFilter()
+    {
+        PageFilterRegistry.Register(new ZstdCompressionPageFilter());
+    }
+
+    public string Id => "VKV.ZstdCompression";
 
     public int GetMaxEncodedLength(int decodedLength)
     {

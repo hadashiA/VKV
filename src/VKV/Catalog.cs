@@ -59,8 +59,10 @@ public class TableDescriptor(
 
 public class Catalog(
     int pageSize,
-    IReadOnlyDictionary<string, TableDescriptor> tableDescriptors)
+    IReadOnlyDictionary<string, TableDescriptor> tableDescriptors,
+    IReadOnlyList<IPageFilter>? filters = null)
 {
     public int PageSize => pageSize;
+    public IReadOnlyList<IPageFilter>? Filters => filters;
     public IReadOnlyDictionary<string, TableDescriptor> TableDescriptors => tableDescriptors;
 }

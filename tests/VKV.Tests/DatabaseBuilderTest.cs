@@ -47,7 +47,10 @@ public class DatabaseBuilderTest
     public async Task BuildCompressPage()
     {
         var builder = new DatabaseBuilder();
-        builder.AddZstandardCompression();
+        builder.AddPageFilter(x =>
+        {
+            x.AddZstandardCompression();
+        });
 
         var itemsTable = builder.CreateTable("items");
 
@@ -60,5 +63,7 @@ public class DatabaseBuilderTest
 
         memoryStream.Seek(0, SeekOrigin.Begin);
         var catalog = await CatalogParser.ParseAsync(memoryStream);
+        Assert.That(catalog.Filters!.Count, Is.EqualTo(1));
+        Assert.That(catalog.Filters[0], Is.InstanceOf<ZstdCompressionPageFilter>());
     }
 }

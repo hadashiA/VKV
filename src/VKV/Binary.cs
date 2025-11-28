@@ -101,6 +101,7 @@ static class CatalogParser
         stream.Seek(Unsafe.SizeOf<Header>(), SeekOrigin.Begin);
 
         // parse filters
+        List<IPageFilter>? filters = null;
         for (var i = 0; i < header.PageFilterCount; i++)
         {
             var pageIdLength = stream.ReadByte();
@@ -108,14 +109,15 @@ static class CatalogParser
             try
             {
                 var bytesRead = await stream.ReadAtLeastAsync(buffer, pageIdLength, cancellationToken: cancellationToken);
-                stream.Seek(-(bytesRead - sizeof(int)), SeekOrigin.Current);
+                stream.Seek(-(bytesRead - pageIdLength), SeekOrigin.Current);
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(buffer);
             }
             var pageId = Encoding.UTF8.GetString(buffer[..pageIdLength]);
-            throw new NotImplementedException("hoge");
+            var filter = PageFilterRegistry.Resolve(pageId);
+            (filters ??= []).Add(filter);
         }
 
         // parse tables
@@ -131,7 +133,7 @@ static class CatalogParser
             }
         }
 
-        return new Catalog(header.PageSize, tableDescriptors);
+        return new Catalog(header.PageSize, tableDescriptors, filters);
     }
 
     static async ValueTask<TableDescriptor> ParseTableDescriptorAsync(Stream stream, CancellationToken cancellationToken)
