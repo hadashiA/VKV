@@ -267,10 +267,10 @@ static class TreeBuilder
 
         // write key/values
         ref var keyValuesReference =
-#if NETSTANDARD
-            ref MemoryMarshal.GetReference(node.KeyValueBuffer.AsSpan());
-#else
+#if NET7_0_OR_GREATER
             ref MemoryMarshal.GetArrayDataReference(node.KeyValueBuffer);
+#else
+            ref MemoryMarshal.GetReference(node.KeyValueBuffer.AsSpan());
 #endif
 
         Unsafe.CopyBlockUnaligned(ref ptr, ref keyValuesReference, (uint)node.KeyValueBufferOffset);

@@ -2,8 +2,8 @@ namespace VKV.Compression;
 
 public static class DatabaseBuilderExtensions
 {
-    public static void AddZstandardCompression(this DatabaseBuilder builder)
+    public static void AddZstandardCompression(this FilterOptions options)
     {
-        builder.AddPageFilter(new ZstdCompressionPageFilter());
+        options.AddFilter(new ZstdCompressionPageFilter());
     }
 }

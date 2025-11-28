@@ -5,7 +5,7 @@ namespace VKV.Compression;
 
 public class ZstdCompressionPageFilter : IPageFilter
 {
-    public byte Flag => 1 << 3;
+    public string Id => "VKV.Zstd";
 
     public int GetMaxEncodedLength(int decodedLength)
     {

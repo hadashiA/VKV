@@ -33,6 +33,18 @@ public class SecondaryIndexOptions(string name, bool isUnique) : IndexOptions(na
     public required Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> ValueToIndexFactory;
 }
 
+public class FilterOptions
+{
+    public IReadOnlyList<IPageFilter> Filters => pageFilters;
+
+    readonly List<IPageFilter> pageFilters = [];
+
+    public void AddFilter(IPageFilter filter)
+    {
+        pageFilters.Add(filter);
+    }
+}
+
 public class TableBuilder
 {
     readonly string name;
@@ -42,13 +54,13 @@ public class TableBuilder
 
     readonly List<SecondaryIndexOptions> secondaryIndexOptions = [];
     readonly KeyValueList keyValues;
-    readonly IReadOnlyList<IPageFilter> pageFilters;
+    readonly IReadOnlyList<IPageFilter>? pageFilters;
 
     internal TableBuilder(
         string name,
         KeyEncoding primaryKeyEncoding,
         int pageSize,
-        IReadOnlyList<IPageFilter> pageFilters)
+        IReadOnlyList<IPageFilter>? pageFilters)
     {
         this.name = name;
         this.pageSize = pageSize;
@@ -245,23 +257,19 @@ public class DatabaseBuilder : IDisposable
 {
     public int PageSize { get; set; } = 4096;
 
-    /// <summary>
-    ///  If true, the encoded state is preserved even in page cache memory.
-    /// </summary>
-    public bool PageCacheEncodeEnabled { get; set; } = false;
-
     readonly MemoryArena arena = new();
     readonly List<TableBuilder> tableBuilders = [];
-    readonly List<IPageFilter>  pageFilters = [];
+    FilterOptions? filterOptions;
 
-    public void AddPageFilter(IPageFilter filter)
+    public void AddPageFilter(Action<FilterOptions> configure)
     {
-        pageFilters.Add(filter);
+        filterOptions ??= new FilterOptions();
+        configure.Invoke(filterOptions);
     }
 
     public TableBuilder CreateTable(string name, KeyEncoding primaryKeyEncoding = KeyEncoding.Ascii)
     {
-        var tableBuilder = new TableBuilder(name, primaryKeyEncoding, PageSize, pageFilters);
+        var tableBuilder = new TableBuilder(name, primaryKeyEncoding, PageSize, filterOptions?.Filters);
         tableBuilders.Add(tableBuilder);
         return tableBuilder;
     }
@@ -282,12 +290,31 @@ public class DatabaseBuilder : IDisposable
         }
         header.MajorVersion = 1;
         header.MinorVersion = 0;
+        header.PageFilterCount = (ushort)(filterOptions?.Filters.Count ?? 0);
         header.PageSize = PageSize;
         header.TableCount = (ushort)tableBuilders.Count;
 
         Span<byte> headerBytes = stackalloc byte[Unsafe.SizeOf<Header>()];
         Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(headerBytes), header);
         stream.Write(headerBytes);
+
+        // write filter ids
+        if (filterOptions?.Filters is { Count: > 0 } filters)
+        {
+            Span<byte> filterIdBuffer = stackalloc byte[byte.MaxValue + 1];
+            for (var i = 0; i < filters.Count; i++)
+            {
+                var filter = filters[i];
+                var filterIdBytes = Encoding.UTF8.GetByteCount(filter.Id);
+                if (filterIdBytes > byte.MaxValue)
+                {
+                    throw new InvalidOperationException($"Filter ID length must be less than 255: `{filter.Id}` ");
+                }
+                var bytesWritten = Encoding.UTF8.GetBytes(filter.Id,  filterIdBuffer[1..]);
+                filterIdBuffer[0] = (byte)bytesWritten;
+                stream.Write(filterIdBuffer[..(bytesWritten + 1)]);
+            }
+        }
 
         foreach (var tableBuilder in tableBuilders)
         {

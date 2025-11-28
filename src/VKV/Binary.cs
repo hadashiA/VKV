@@ -12,29 +12,32 @@ using System.Threading.Tasks;
 namespace VKV;
 
 // Header
-//   magic_bytes(4): "VKV0"
+//   magic_bytes(4): "VKV\0"
 //   major_version(1): byte
-//   minor_version1): byte
-//   page_filter_bits(1): byte
-//   padding(1): byte
+//   minor_version(1): byte
+//   page_filter_count(2): ushort
 //   page_size(4): int
 //   table_count(2): int
 //
-// Table[0]:
+//   PageFilter[0]
+//     name_length(1): byte
+//     name(name_length): utf8
+//
+//   Table[0]:
 //     name_length(4): int
-//     name=(name_length): utf8
+//     name(name_length): utf8
 //     Index(Primary Key):
-//         name_length(4): in5
-//         name(name_length): utf8
-//         is_unique(1): bool
-//         key_encoding(1): enum
-//         value_kind(1): enum
-//         root_position(8): long
+//       name_length(4): in5
+//       name(name_length): utf8
+//       is_unique(1): bool
+//       key_encoding(1): enum
+//       value_kind(1): enum
+//       root_position(8): long
 //     index_count(2): ushort
 //     Index[1](Secondary Key):
-//         ...
-//  Table[1]:
-//     ...
+//       ...
+//    Table[1]:
+//      ...
 //
 // Page[0]
 //   page_length(4): int
@@ -56,16 +59,10 @@ unsafe struct Header
     public byte MinorVersion;
 
     [FieldOffset(6)]
-    public byte PageFilterFlags;
-
-    [FieldOffset(8)]
-    public fixed byte PageSizeBytes[4];
+    public ushort PageFilterCount;
 
     [FieldOffset(8)]
     public int PageSize;
-
-    [FieldOffset(12)]
-    public fixed byte TableCountBytes[2];
 
     [FieldOffset(12)]
     public ushort TableCount;
@@ -103,6 +100,25 @@ static class CatalogParser
         }
         stream.Seek(Unsafe.SizeOf<Header>(), SeekOrigin.Begin);
 
+        // parse filters
+        for (var i = 0; i < header.PageFilterCount; i++)
+        {
+            var pageIdLength = stream.ReadByte();
+            buffer = ArrayPool<byte>.Shared.Rent(pageIdLength);
+            try
+            {
+                var bytesRead = await stream.ReadAtLeastAsync(buffer, pageIdLength, cancellationToken: cancellationToken);
+                stream.Seek(-(bytesRead - sizeof(int)), SeekOrigin.Current);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+            var pageId = Encoding.UTF8.GetString(buffer[..pageIdLength]);
+            throw new NotImplementedException("hoge");
+        }
+
+        // parse tables
         var tableCount = header.TableCount;
         var tableDescriptors = new Dictionary<string, TableDescriptor>(tableCount);
 
