@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using NativeCompressions;
 
 namespace VKV.Compression;
@@ -12,18 +13,53 @@ public class ZstdCompressionPageFilter : IPageFilter
 
     public string Id => "VKV.ZstdCompression";
 
-    public int GetMaxEncodedLength(int decodedLength)
+    public void Encode(ReadOnlySpan<byte> input, IBufferWriter<byte> output)
     {
-        return Zstandard.GetMaxCompressedLength(decodedLength);
+        using var encoder = new ZstandardEncoder();
+        var maxDestinationLength = Zstandard.GetMaxCompressedLength(input.Length);
+        OperationStatus status;
+        do
+        {
+            var destination = output.GetSpan(maxDestinationLength);
+
+            status = encoder.Compress(
+                input,
+                destination,
+                out var bytesConsumed,
+                out var bytesWritten,
+                isFinalBlock: true);
+
+            if (status == OperationStatus.InvalidData)
+            {
+                throw new Exception("zstd compress failed. invalid data");
+            }
+
+            input = input[bytesConsumed..];
+            output.Advance(bytesWritten);
+        } while (status == OperationStatus.DestinationTooSmall);
     }
 
-    public int Encode(ReadOnlySpan<byte> input, Span<byte> output)
+    public void Decode(ReadOnlySpan<byte> input, IBufferWriter<byte> output)
     {
-        return Zstandard.Compress(input, output);
-    }
+        using var decoder = new ZstandardDecoder();
+        OperationStatus status;
+        do
+        {
+            var destination = output.GetSpan(input.Length);
 
-    public int Decode(ReadOnlySpan<byte> input, Span<byte> output)
-    {
-        return Zstandard.Decompress(input, output);
+            status = decoder.Decompress(
+                input,
+                destination,
+                out var bytesConsumed,
+                out var bytesWritten);
+
+            if (status == OperationStatus.InvalidData)
+            {
+                throw new Exception("zstd compress failed. invalid data");
+            }
+
+            input = input[bytesConsumed..];
+            output.Advance(bytesWritten);
+        } while (status == OperationStatus.DestinationTooSmall);
     }
 }

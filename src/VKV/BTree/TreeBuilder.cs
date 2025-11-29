@@ -8,6 +8,11 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.Internal;
+#if NET7_0_OR_GREATER
+using static System.Runtime.InteropServices.MemoryMarshal;
+#else
+using static System.Runtime.CompilerServices.MemoryMarshalEx;
+#endif
 
 namespace VKV.BTree;
 
@@ -70,12 +75,7 @@ static class TreeBuilder
                 leaf = nodes[0];
             }
 
-            ref var keyValueBufferReference =
-#if NETSTANDARD
-                ref MemoryMarshal.GetReference(leaf.KeyValueBuffer.AsSpan());
-#else
-                ref MemoryMarshal.GetArrayDataReference(leaf.KeyValueBuffer);
-#endif
+            ref var keyValueBufferReference = ref GetArrayDataReference(leaf.KeyValueBuffer);
             keyValueBufferReference = ref Unsafe.Add(ref keyValueBufferReference, leaf.KeyValueBufferOffset);
 
             Unsafe.CopyBlockUnaligned(
@@ -189,13 +189,9 @@ static class TreeBuilder
             if (parent.EntryCount == 0) parent.FirstKey = sepKey; // first key of new page
         }
 
-        ref var parentKeyValueBufferReference =
-#if NETSTANDARD
-            ref MemoryMarshal.GetReference(parent.KeyValueBuffer.AsSpan());
-#else
-            ref MemoryMarshal.GetArrayDataReference(parent.KeyValueBuffer);
-#endif
-        parentKeyValueBufferReference = ref Unsafe.Add(ref parentKeyValueBufferReference, parent.KeyValueBufferOffset);
+        ref var parentKeyValueBufferReference = ref Unsafe.Add(
+                ref GetArrayDataReference(parent.KeyValueBuffer),
+            parent.KeyValueBufferOffset);
 
         Unsafe.CopyBlockUnaligned(
             ref parentKeyValueBufferReference,
@@ -227,12 +223,7 @@ static class TreeBuilder
                          node.KeyValueBufferOffset;
 
         var buffer = ArrayPool<byte>.Shared.Rent(pageLength);
-        ref var ptr =
-#if NETSTANDARD
-            ref MemoryMarshal.GetReference(buffer.AsSpan());
-#else
-            ref MemoryMarshal.GetArrayDataReference(buffer);
-#endif
+        ref var ptr = ref GetArrayDataReference(buffer);
         // write page header
         Unsafe.WriteUnaligned(ref ptr, pageLength);
         ptr = ref Unsafe.Add(ref ptr, sizeof(int));
@@ -266,39 +257,35 @@ static class TreeBuilder
         }
 
         // write key/values
-        ref var keyValuesReference =
-#if NET7_0_OR_GREATER
-            ref MemoryMarshal.GetArrayDataReference(node.KeyValueBuffer);
-#else
-            ref MemoryMarshal.GetReference(node.KeyValueBuffer.AsSpan());
-#endif
-
+        ref var keyValuesReference = ref GetArrayDataReference(node.KeyValueBuffer);
         Unsafe.CopyBlockUnaligned(ref ptr, ref keyValuesReference, (uint)node.KeyValueBufferOffset);
 
         if (filters is { Count: > 0 })
         {
-            var input = buffer;
-            var output = ArrayPool<byte>.Shared.Rent(pageLength);
-            for (var i = 0; i < filters.Count; i++)
-            {
-                var pageFilter = filters[i];
-                var maxLength = pageFilter.GetMaxEncodedLength(input.Length);
-                if (output.Length < maxLength)
-                {
-                    ArrayPool<byte>.Shared.Return(output);
-                    output = ArrayPool<byte>.Shared.Rent(maxLength);
-                }
-                pageLength = pageFilter.Encode(input.AsSpan(0, pageLength), output);
+            var output = BufferWriterPool.Rent(pageLength);
 
-                // last
-                if (i >= filters.Count - 1)
+            // first one
+            filters[0].Encode(buffer, output);
+            if (filters.Count <= 1)
+            {
+                await outStream.WriteAsync(output.WrittenMemory, cancellationToken);
+                BufferWriterPool.Return(output);
+            }
+            else
+            {
+                // double buffer
+                var input = output;
+                output = BufferWriterPool.Rent(output.WrittenCount);
+
+                for (var i = 1; i < filters.Count; i++)
                 {
-                    await outStream.WriteAsync(output.AsMemory(0, pageLength), cancellationToken);
-                    ArrayPool<byte>.Shared.Return(output);
-                    break;
+                    filters[i].Encode(input.WrittenSpan, output);
+                    (output, input) = (input, output);
                 }
-                input = output;
-                output = buffer;
+
+                await outStream.WriteAsync(output.WrittenMemory, cancellationToken);
+                BufferWriterPool.Return(input);
+                BufferWriterPool.Return(output);
             }
         }
         else

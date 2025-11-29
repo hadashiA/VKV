@@ -21,7 +21,7 @@ static class TestHelper
 
         var result = memoryStream.ToArray();
         var storage = new InMemoryStorage(result.ToArray());
-        var pageCache = new PageCache(storage, 8);
+        var pageCache = new PageCache(storage, 8, []);
         return new TreeWalker(pos, pageCache, KeyEncoding.Ascii);
     }
 

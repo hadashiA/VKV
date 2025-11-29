@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 
 namespace VKV;
@@ -7,10 +8,8 @@ public interface IPageFilter
 {
     string Id { get; }
 
-    int GetMaxEncodedLength(int decodedLength);
-
-    int Encode(ReadOnlySpan<byte> input, Span<byte> output);
-    int Decode(ReadOnlySpan<byte> input, Span<byte> output);
+    void Encode(ReadOnlySpan<byte> input, IBufferWriter<byte> output);
+    void Decode(ReadOnlySpan<byte> input, IBufferWriter<byte> output);
 }
 
 public static class PageFilterRegistry

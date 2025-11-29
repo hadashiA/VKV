@@ -14,6 +14,12 @@ public readonly record struct PageNumber(long Value)
 
 public interface IStorage : IDisposable
 {
-    ValueTask<IMemoryOwner<byte>> ReadPageAsync(PageNumber pageNumber, CancellationToken cancellationToken = default);
-    IMemoryOwner<byte> ReadPage(PageNumber pageNumber);
+    ValueTask<IMemoryOwner<byte>> ReadPageAsync(
+        PageNumber pageNumber,
+        IPageFilter[]? filters = null,
+        CancellationToken cancellationToken = default);
+
+    IMemoryOwner<byte> ReadPage(
+        PageNumber pageNumber,
+        IPageFilter[]? filters = null);
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.Internal;
@@ -57,7 +58,7 @@ public sealed class ReadOnlyDatabase : IDisposable
     {
         Catalog = catalog;
         this.storage = storage;
-        pageCache = new PageCache(storage, pageCacheCapacity);
+        pageCache = new PageCache(storage, pageCacheCapacity, catalog.Filters?.ToArray() ?? []);
     }
 
     public void Dispose()

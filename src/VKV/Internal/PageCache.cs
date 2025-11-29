@@ -59,6 +59,7 @@ public sealed class PageCache : IDisposable
 
     readonly IStorage storage;
     readonly int capacity;
+    readonly IPageFilter[]? filters;
     readonly int sTargetSize;
     readonly int mTargetSize;
 
@@ -70,11 +71,13 @@ public sealed class PageCache : IDisposable
     internal PageCache(
         IStorage storage,
         int capacity,
+        IPageFilter[]? filters,
         double smallFraction = 0.1,
         double ghostFraction = 1.0)
     {
         this.storage = storage;
         this.capacity = capacity;
+        this.filters = filters;
 
         sTargetSize = Math.Max(1, (int)(capacity * smallFraction));
         mTargetSize = capacity - sTargetSize;
@@ -87,7 +90,6 @@ public sealed class PageCache : IDisposable
             Environment.ProcessorCount,
             (int)(mTargetSize * ghostFraction));
 
-        // FIFO キュー容量は適当に 2 の冪に丸める
         var fifoCap = 1;
         while (fifoCap < capacity) fifoCap <<= 1;
 
@@ -139,7 +141,7 @@ public sealed class PageCache : IDisposable
 
     public async ValueTask LoadAsync(PageNumber pageNumber, CancellationToken cancellationToken = default)
     {
-        var buffer = await storage.ReadPageAsync(pageNumber, cancellationToken);
+        var buffer = await storage.ReadPageAsync(pageNumber, filters, cancellationToken);
         AddEntry(pageNumber, buffer);
     }
 
