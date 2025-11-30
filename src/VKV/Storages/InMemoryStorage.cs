@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using VKV.BTree;
 using VKV.Internal;
 
 namespace VKV.Storages;
@@ -31,7 +32,10 @@ public class InMemoryStorage(Memory<byte> memory) : IStorage
         {
             try
             {
-                destination = ApplyFilter(destination, filters);
+                return new ValueTask<IMemoryOwner<byte>>(
+                    ApplyFilter(
+                        destination.Memory.Span[..pageLength],
+                        filters));
             }
             finally
             {
@@ -57,7 +61,9 @@ public class InMemoryStorage(Memory<byte> memory) : IStorage
         {
             try
             {
-                return ApplyFilter(destination, filters);
+                return ApplyFilter(
+                    destination.Memory.Span[..pageLength],
+                    filters);
             }
             finally
             {
@@ -67,10 +73,21 @@ public class InMemoryStorage(Memory<byte> memory) : IStorage
         return destination;
     }
 
-    static IMemoryOwner<byte> ApplyFilter(IMemoryOwner<byte> source, IPageFilter[] filters)
+    static IMemoryOwner<byte> ApplyFilter(ReadOnlySpan<byte> source, IPageFilter[] filters)
     {
-        var output = BufferWriterPool.Rent(source.Memory.Length);
-        filters[0].Encode(source.Memory.Span, output);
+        var headerSize = Unsafe.SizeOf<PageHeader>() + Unsafe.SizeOf<NodeHeader>();
+        var output = BufferWriterPool.Rent(source.Length);
+
+        // copy header
+        output.Write(source[..headerSize]);
+
+        filters[0].Decode(source[headerSize..], output);
+
+        // update page header
+        Unsafe.WriteUnaligned(
+            ref MemoryMarshal.GetReference(output.WrittenSpan),
+            new PageHeader { PageSize = output.WrittenCount });
+
         if (filters.Length <= 1)
         {
             return output.ToPoolableMemory();
@@ -82,7 +99,16 @@ public class InMemoryStorage(Memory<byte> memory) : IStorage
 
         for (var i = 1; i < filters.Length; i++)
         {
-            filters[i].Encode(input.WrittenSpan, output);
+            // copy header
+            output.Write(source[..headerSize]);
+
+            // copy node header
+            filters[i].Encode(input.WrittenSpan[headerSize..], output);
+
+            // update page header
+            Unsafe.WriteUnaligned(
+                ref MemoryMarshal.GetReference(output.WrittenSpan),
+                new PageHeader { PageSize = output.WrittenCount });
 
             // last
             if (i >= filters.Length - 1)

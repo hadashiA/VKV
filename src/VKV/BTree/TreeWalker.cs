@@ -86,7 +86,7 @@ class TreeWalker
         return new SingleValueResult(resultValue, true);
     }
 
-    public RangeIterator GetIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
+    public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(this, iteratorDirection);
 
     public async ValueTask<RangeResult> GetRangeAsync(
@@ -298,9 +298,9 @@ class TreeWalker
                 next = null;
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                if (leafNode.TryFindValue(key, keyComparer, out var valueOffset, out var valueLength))
+                if (leafNode.TryFindValue(key, keyComparer, out var valueOffset, out var valueLength, out var index))
                 {
-                    value = new PageSlice(page, valueOffset, valueLength);
+                    value = new PageSlice(page, valueOffset, valueLength, index);
                     return true;
                 }
 
@@ -396,7 +396,7 @@ class TreeWalker
                 }
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 leafNode.GetAt(0, out _, out var valuePageOffset, out var valueLength);
-                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
+                var pageSlice = new PageSlice(page, valuePageOffset, valueLength, 0);
                 return new SingleValueResult(pageSlice, true);
             }
         }
@@ -433,7 +433,7 @@ class TreeWalker
                 }
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 leafNode.GetAt(header.EntryCount - 1, out _, out var valuePageOffset, out var valueLength);
-                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
+                var pageSlice = new PageSlice(page, valuePageOffset, valueLength, (ushort)(header.EntryCount - 1));
                 return new SingleValueResult(pageSlice, true);
             }
         }

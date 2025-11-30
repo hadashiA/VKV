@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace VKV.Internal;
 
@@ -48,7 +47,7 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
         if (initialCapacity <= 0)
             throw new ArgumentException(null, nameof(initialCapacity));
 
-        _buffer = new T[initialCapacity];
+        _buffer = ArrayPool<T>.Shared.Rent(initialCapacity);
         _index = 0;
     }
 
@@ -60,12 +59,18 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
 
     public void Clear()
     {
-        Debug.Assert(_buffer.Length >= _index);
         _buffer.AsSpan(0, _index).Clear();
         _index = 0;
     }
 
     public void ResetWrittenCount() => _index = 0;
+
+    public void Write(ReadOnlySpan<T> value)
+    {
+        CheckAndResizeBuffer(value.Length);
+        value.CopyTo(_buffer.AsSpan(_index));
+        Advance(value.Length);
+    }
 
     public void Advance(int count)
     {
@@ -83,14 +88,12 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
     public Memory<T> GetMemory(int sizeHint = 0)
     {
         CheckAndResizeBuffer(sizeHint);
-        Debug.Assert(_buffer.Length > _index);
         return _buffer.AsMemory(_index);
     }
 
     public Span<T> GetSpan(int sizeHint = 0)
     {
         CheckAndResizeBuffer(sizeHint);
-        Debug.Assert(_buffer.Length > _index);
         return _buffer.AsSpan(_index);
     }
 
@@ -99,7 +102,7 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
     void CheckAndResizeBuffer(int sizeHint)
     {
         if (sizeHint < 0)
-            throw new ArgumentException(nameof(sizeHint));
+            throw new ArgumentException(null, nameof(sizeHint));
 
         if (sizeHint == 0)
         {
@@ -108,23 +111,22 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
 
         if (sizeHint > FreeCapacity)
         {
-            int currentLength = _buffer.Length;
+            var currentLength = _buffer.Length;
 
             // Attempt to grow by the larger of the sizeHint and double the current size.
-            int growBy = Math.Max(sizeHint, currentLength);
+            var growBy = Math.Max(sizeHint, currentLength);
 
             if (currentLength == 0)
             {
                 growBy = Math.Max(growBy, DefaultInitialBufferSize);
             }
 
-            int newSize = currentLength + growBy;
+            var newSize = currentLength + growBy;
 
             if ((uint)newSize > int.MaxValue)
             {
                 // Attempt to grow to ArrayMaxLength.
-                uint needed = (uint)(currentLength - FreeCapacity + sizeHint);
-                Debug.Assert(needed > currentLength);
+                var needed = (uint)(currentLength - FreeCapacity + sizeHint);
 
                 if (needed > ArrayMaxLength)
                 {
@@ -134,10 +136,17 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
                 newSize = ArrayMaxLength;
             }
 
-            Array.Resize(ref _buffer, newSize);
-        }
+            var newBuffer = ArrayPool<T>.Shared.Rent(newSize);
+            Buffer.BlockCopy(
+                _buffer,
+                0,
+                newBuffer,
+                0,
+                _buffer.Length);
 
-        Debug.Assert(FreeCapacity > 0 && FreeCapacity >= sizeHint);
+            ArrayPool<T>.Shared.Return(_buffer);
+            _buffer = newBuffer;
+        }
     }
 
     static void ThrowInvalidOperationException_AdvancedTooFar(int capacity)

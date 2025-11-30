@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace VKV.BTree;
 
-enum NodeKind : byte
+enum NodeKind
 {
     Leaf = 0,
     Internal = 1,

@@ -39,7 +39,7 @@ sealed class NodeEntry(int pageSize)
 
 static class TreeBuilder
 {
-    static readonly int PageHeaderSize = sizeof(int) + Unsafe.SizeOf<NodeHeader>();
+    static readonly int PageHeaderSize = Unsafe.SizeOf<PageHeader>() + Unsafe.SizeOf<NodeHeader>();
     static readonly int RightSiblingPositionPageOffset = PageHeaderSize - sizeof(long);
 
     public static async ValueTask<PageNumber> BuildToAsync(
@@ -210,30 +210,33 @@ static class TreeBuilder
 
     static async ValueTask FlushPageAsync(
         Stream outStream,
-        NodeHeader header,
+        NodeHeader nodeHeader,
         NodeEntry node,
         IReadOnlyList<IPageFilter>? filters,
         CancellationToken cancellationToken = default)
     {
-        var pageLength = sizeof(int) + // page size
-                         Unsafe.SizeOf<NodeHeader>() +
-                         node.EntryCount * (header.Kind == NodeKind.Leaf
+        var pageLength = PageHeaderSize +
+                         node.EntryCount * (nodeHeader.Kind == NodeKind.Leaf
                              ? sizeof(int) + sizeof(ushort) * 2
                              : sizeof(int) + sizeof(ushort)) +
                          node.KeyValueBufferOffset;
 
         var buffer = ArrayPool<byte>.Shared.Rent(pageLength);
         ref var ptr = ref GetArrayDataReference(buffer);
+
         // write page header
-        Unsafe.WriteUnaligned(ref ptr, pageLength);
-        ptr = ref Unsafe.Add(ref ptr, sizeof(int));
+        Unsafe.WriteUnaligned(ref ptr, new PageHeader
+        {
+            PageSize = pageLength
+        });
+        ptr = ref Unsafe.Add(ref ptr, Unsafe.SizeOf<PageHeader>());
 
         // write node header
-        Unsafe.WriteUnaligned(ref ptr, header);
+        Unsafe.WriteUnaligned(ref ptr, nodeHeader);
         ptr = ref Unsafe.Add(ref ptr, Unsafe.SizeOf<NodeHeader>());
 
         // write meta(s)
-        var metaSize = header.Kind == NodeKind.Leaf
+        var metaSize = nodeHeader.Kind == NodeKind.Leaf
             ? sizeof(int) + sizeof(ushort) * 2
             : sizeof(int) + sizeof(ushort);
 
@@ -247,7 +250,7 @@ static class TreeBuilder
             Unsafe.WriteUnaligned(ref ptr, (ushort)keyLength);
             ptr = ref Unsafe.Add(ref ptr, sizeof(ushort));
 
-            if (header.Kind == NodeKind.Leaf)
+            if (nodeHeader.Kind == NodeKind.Leaf)
             {
                 // variable length value
                 Unsafe.WriteUnaligned(ref ptr, (ushort)valueLength);
@@ -262,14 +265,23 @@ static class TreeBuilder
 
         if (filters is { Count: > 0 })
         {
+            var source = buffer.AsSpan(0, pageLength);
             var output = BufferWriterPool.Rent(pageLength);
 
-            // first one
-            filters[0].Encode(buffer, output);
+            // copy header
+            output.Write(source[..PageHeaderSize]);
+
+            // encode
+            filters[0].Encode(source[PageHeaderSize..], output);
+
+            // update page header
+            Unsafe.WriteUnaligned(
+                ref MemoryMarshal.GetReference(output.WrittenSpan),
+                new PageHeader { PageSize = output.WrittenCount });
+
             if (filters.Count <= 1)
             {
                 await outStream.WriteAsync(output.WrittenMemory, cancellationToken);
-                BufferWriterPool.Return(output);
             }
             else
             {
@@ -279,14 +291,23 @@ static class TreeBuilder
 
                 for (var i = 1; i < filters.Count; i++)
                 {
-                    filters[i].Encode(input.WrittenSpan, output);
+                    // copy header
+                    output.Write(source[..PageHeaderSize]);
+
+                    // encode
+                    filters[i].Encode(input.WrittenSpan[PageHeaderSize..], output);
+
+                    // update page header
+                    Unsafe.WriteUnaligned(
+                        ref MemoryMarshal.GetReference(output.WrittenSpan),
+                        new PageHeader{ PageSize = output.WrittenCount });
                     (output, input) = (input, output);
                 }
 
                 await outStream.WriteAsync(output.WrittenMemory, cancellationToken);
                 BufferWriterPool.Return(input);
-                BufferWriterPool.Return(output);
             }
+            BufferWriterPool.Return(output);
         }
         else
         {
@@ -295,5 +316,7 @@ static class TreeBuilder
         ArrayPool<byte>.Shared.Return(buffer);
 
         await outStream.FlushAsync(cancellationToken);
+
+        // TODO: alignment
     }
 }

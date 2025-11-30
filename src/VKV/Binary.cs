@@ -77,6 +77,13 @@ unsafe struct Header
     }
 }
 
+[StructLayout(LayoutKind.Explicit, Size = 4)]
+struct PageHeader
+{
+    [FieldOffset(0)]
+    public int PageSize;
+}
+
 public class StorageFormatException(string message) : Exception(message);
 
 static class CatalogParser

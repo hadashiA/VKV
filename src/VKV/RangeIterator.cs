@@ -13,23 +13,16 @@ public enum IteratorDirection
     Backward
 }
 
-public struct RangeIterator :
+public class RangeIterator :
     IEnumerable<ReadOnlyMemory<byte>>,
     IEnumerator<ReadOnlyMemory<byte>>,
     IAsyncEnumerable<ReadOnlyMemory<byte>>,
     IAsyncEnumerator<ReadOnlyMemory<byte>>
 {
-    public static RangeIterator Empty => new();
-
-    public void Reset()
-    {
-        throw new NotImplementedException();
-    }
-
     object? IEnumerator.Current => Current;
 
     public ReadOnlyMemory<byte> Current =>
-        currentPage!.Memory.Slice(currentValueOffset, currentValueLength);
+        currentPage?.Memory.Slice(currentValueOffset, currentValueLength) ?? default;
 
     // iterator state
     readonly TreeWalker treeWalker;
@@ -67,8 +60,14 @@ public struct RangeIterator :
 
     public void Dispose()
     {
-        currentNodeEntryCount = -2;
         currentPage?.Release();
+        currentPage = null;
+    }
+
+    public void Reset()
+    {
+        currentPage?.Release();
+        currentPage = null;
     }
 
     public bool TrySeek(ReadOnlySpan<byte> key)
@@ -76,7 +75,9 @@ public struct RangeIterator :
         PageNumber? nextPageNumber = treeWalker.RootPageNumber;
         PageSlice pageSlice;
 
-        while (!treeWalker.TryFindFrom(nextPageNumber.Value, key,
+        while (!treeWalker.TryFindFrom(
+                   nextPageNumber.Value,
+                   key,
                    out pageSlice,
                    out nextPageNumber))
         {
@@ -90,6 +91,8 @@ public struct RangeIterator :
             currentPage = pageSlice.Page;
             currentNodeEntryCount = currentPage.GetEntryCount();
         }
+
+        currentIndex = pageSlice.Index;
         currentValueOffset = pageSlice.Start;
         currentValueLength = pageSlice.Length;
         return true;
@@ -120,6 +123,7 @@ public struct RangeIterator :
         }
         currentValueOffset = pageSlice.Start;
         currentValueLength = pageSlice.Length;
+        currentIndex = pageSlice.Index;
         return true;
     }
 

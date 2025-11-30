@@ -22,7 +22,7 @@ public class RangeIteratorTest
                 { "key9"u8.ToArray(), "value9"u8.ToArray() },
             }, 128);
 
-        var iterator = tree.GetIterator();
+        var iterator = tree.CreateIterator();
         Assert.That(iterator.MoveNext(), Is.True);
 
         Assert.That(
@@ -45,7 +45,7 @@ public class RangeIteratorTest
                 { "key9"u8.ToArray(), "value9"u8.ToArray() },
             }, 128);
 
-        var iterator = tree.GetIterator();
+        var iterator = tree.CreateIterator();
         Assert.That(iterator.TrySeek("key10"u8), Is.False);
         Assert.That(iterator.TrySeek("key5"u8), Is.True);
 
@@ -86,7 +86,7 @@ public class RangeIteratorTest
                 { "key9"u8.ToArray(), "value9"u8.ToArray() },
             }, 128);
 
-        var iterator = tree.GetIterator();
+        var iterator = tree.CreateIterator();
         var result = await iterator.MoveNextAsync();
         Assert.That(result, Is.True);
 

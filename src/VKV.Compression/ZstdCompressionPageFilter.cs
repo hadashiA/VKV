@@ -55,7 +55,7 @@ public class ZstdCompressionPageFilter : IPageFilter
 
             if (status == OperationStatus.InvalidData)
             {
-                throw new Exception("zstd compress failed. invalid data");
+                throw new Exception("zstd decompress failed. invalid data");
             }
 
             input = input[bytesConsumed..];

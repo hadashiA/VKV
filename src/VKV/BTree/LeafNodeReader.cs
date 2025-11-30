@@ -65,18 +65,21 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
         scoped ReadOnlySpan<byte> key,
         IKeyComparer keyComparer,
         out int valueOffset,
-        out ushort valueLength)
+        out ushort valueLength,
+        out ushort valueIndex)
     {
         if (TrySearch(key, SearchOperator.Equal, keyComparer, out var index))
         {
             var meta = GetMeta(index);
             valueOffset = meta.PageOffset + meta.KeyLength;
             valueLength = meta.ValueLength;
+            valueIndex = (ushort)index;
             return true;
         }
 
         valueOffset = default;
         valueLength = default;
+        valueIndex = default;
         return false;
     }
 

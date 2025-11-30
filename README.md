@@ -47,9 +47,6 @@ var builder = new DatabaseBuilder
 {
      // The smallest unit of data loaded into memory
     PageSize = 4096,
-    
-    // If true, enables compression and other encoding for in-memory pages.
-    PageCacheEncodeEnabled = false, 
 };
 
 // Create table (string key - ascii comparer)

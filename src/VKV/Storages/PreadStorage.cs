@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -58,7 +59,9 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
         {
             try
             {
-                return ApplyFilter(destination, filters);
+                return ApplyFilter(
+                    destination.Memory.Span[..Unsafe.SizeOf<PageHeader>()],
+                    filters);
             }
             finally
             {
@@ -94,7 +97,9 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
         {
             try
             {
-                return ApplyFilter(destination, filters);
+                return ApplyFilter(
+                    destination.Memory.Span[..Unsafe.SizeOf<PageHeader>()],
+                    filters);
             }
             finally
             {
@@ -104,11 +109,16 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
         return destination;
     }
 
-
-    static IMemoryOwner<byte> ApplyFilter(IMemoryOwner<byte> source, IPageFilter[] filters)
+    static IMemoryOwner<byte> ApplyFilter(ReadOnlySpan<byte> source, IPageFilter[] filters)
     {
-        var output = BufferWriterPool.Rent(source.Memory.Length);
-        filters[0].Encode(source.Memory.Span, output);
+        var output = BufferWriterPool.Rent(source.Length);
+        output.Advance(Unsafe.SizeOf<PageHeader>());
+
+        filters[0].Decode(source[Unsafe.SizeOf<PageHeader>()..], output);
+        Unsafe.WriteUnaligned(
+            ref MemoryMarshal.GetReference(output.WrittenSpan),
+            new PageHeader { PageSize = output.WrittenCount });
+
         if (filters.Length <= 1)
         {
             return output.ToPoolableMemory();
@@ -120,7 +130,11 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
 
         for (var i = 1; i < filters.Length; i++)
         {
+            output.Advance(Unsafe.SizeOf<PageHeader>());
             filters[i].Encode(input.WrittenSpan, output);
+            Unsafe.WriteUnaligned(
+                ref MemoryMarshal.GetReference(output.WrittenSpan),
+                new PageHeader { PageSize = output.WrittenCount });
 
             // last
             if (i >= filters.Length - 1)
