@@ -3,7 +3,6 @@ using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -90,13 +89,13 @@ namespace VKV.Unity
                 switch (status)
                 {
                     case ReadStatus.Complete:
+                    case ReadStatus.Truncated:
                         handle.Dispose();
-                        break;
+                        goto Result;
                     case ReadStatus.InProgress:
                         await Awaitable.NextFrameAsync(cancellationToken);
                         break;
                     case ReadStatus.Failed:
-                    case ReadStatus.Truncated:
                         handle.Dispose();
                         throw new UnityNativeAllocatorFileStorageException($"Failed to read {filePath}: {status}");
                     case ReadStatus.Canceled:
@@ -107,7 +106,11 @@ namespace VKV.Unity
                         throw new ArgumentOutOfRangeException();
                 }
             }
-
+            Result:
+            if (filters is { Length: > 0 })
+            {
+                return ApplyFilter(buffer, filters);
+            }
             return new NativeArrayMemoryManager<byte>(buffer);
         }
 
@@ -127,6 +130,10 @@ namespace VKV.Unity
             {
                 var handle = AsyncReadManager.Read(filePath, (ReadCommand*)commands.GetUnsafeReadOnlyPtr(), 1);
                 handle.JobHandle.Complete();
+                if (filters is { Length: > 0 })
+                {
+                    return ApplyFilter(buffer, filters);
+                }
                 return new NativeArrayMemoryManager<byte>(buffer, true);
             }
             catch (Exception)
@@ -179,7 +186,7 @@ namespace VKV.Unity
                 // last
                 if (i >= filters.Length - 1)
                 {
-                    BufferWriterPool.Enqueue(input);
+                    ReturnBufferWriter(input);
                     return output.GetMemoryManager();
                 }
                 (output, input) = (input, output);
