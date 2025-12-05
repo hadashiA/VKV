@@ -35,10 +35,10 @@ namespace VKV.Tests
 
             await builder.BuildToFileAsync(filePath);
 
-            var database = await ReadOnlyDatabase.LoadFromFileAsync(filePath, new DatabaseLoadOptions
+            var database = await ReadOnlyDatabase.OpenFileAsync(filePath, new DatabaseLoadOptions
             {
                 PageCacheCapacity = 2,
-                StorageFactory = UnityNativeAllocatorFileStorage.Factory,
+                StorageFactory = UnityNativeAllocatorPageLoader.Factory,
             });
             var table  = database.GetTable("items");
             using var result = await table.GetRangeAsync(

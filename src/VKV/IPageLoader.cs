@@ -1,7 +1,9 @@
 using System;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using VKV.BTree;
 
 namespace VKV;
 
@@ -12,7 +14,7 @@ public readonly record struct PageNumber(long Value)
     public bool IsEmpty => Value == -1;
 }
 
-public interface IStorage : IDisposable
+public interface IPageLoader : IDisposable
 {
     ValueTask<IMemoryOwner<byte>> ReadPageAsync(
         PageNumber pageNumber,
@@ -22,4 +24,13 @@ public interface IStorage : IDisposable
     IMemoryOwner<byte> ReadPage(
         PageNumber pageNumber,
         IPageFilter[]? filters = null);
+}
+
+public static class PageLoaderExtensions
+{
+    public static int TotalPageHeaderSize => Unsafe.SizeOf<PageHeader>() +
+                                             Unsafe.SizeOf<NodeHeader>();
+
+    public static int GetTotalPageHeaderSize(this IPageLoader loader) =>
+        TotalPageHeaderSize;
 }

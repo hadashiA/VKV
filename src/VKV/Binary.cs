@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VKV.BTree;
 
 namespace VKV;
 
@@ -78,7 +79,7 @@ unsafe struct Header
 }
 
 [StructLayout(LayoutKind.Explicit, Size = 4)]
-struct PageHeader
+public struct PageHeader
 {
     [FieldOffset(0)]
     public int PageSize;
@@ -86,9 +87,11 @@ struct PageHeader
 
 public class StorageFormatException(string message) : Exception(message);
 
-static class CatalogParser
+static class BinaryFormatter
 {
-    public static async ValueTask<Catalog> ParseAsync(Stream stream, CancellationToken cancellationToken = default)
+    // TODO: Integrate the builder into this class.
+
+    public static async ValueTask<Catalog> ParseCatalogAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         Header header;
         var buffer = ArrayPool<byte>.Shared.Rent(Unsafe.SizeOf<Header>());

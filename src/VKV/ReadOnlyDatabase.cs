@@ -8,7 +8,7 @@ using VKV.Storages;
 
 namespace VKV;
 
-public delegate IStorage StorageFactory(Stream stream, int pageSize);
+public delegate IPageLoader StorageFactory(Stream stream, int pageSize);
 
 public record DatabaseLoadOptions
 {
@@ -18,12 +18,12 @@ public record DatabaseLoadOptions
     {
         if (stream is FileStream fs)
         {
-            return new PreadStorage(fs.SafeFileHandle);
+            return new PreadPageLoader(fs.SafeFileHandle);
         }
 
         if (stream is MemoryStream ms)
         {
-            return new InMemoryStorage(ms.ToArray());
+            return new InMemoryPageLoader(ms.ToArray());
         }
 
         throw new NotSupportedException($"unsupported stream type: {stream.GetType().Name}");
@@ -45,26 +45,26 @@ public sealed class ReadOnlyDatabase : IDisposable
     public static async ValueTask<ReadOnlyDatabase> OpenAsync(Stream stream, DatabaseLoadOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= DatabaseLoadOptions.Default;
-        var catalog = await CatalogParser.ParseAsync(stream, cancellationToken);
+        var catalog = await BinaryFormatter.ParseCatalogAsync(stream, cancellationToken);
         var storage = options.StorageFactory.Invoke(stream, catalog.PageSize);
         return new ReadOnlyDatabase(catalog, storage, options.PageCacheCapacity);
     }
 
     public Catalog Catalog { get; }
-    readonly IStorage storage;
+    readonly IPageLoader pageLoader;
     readonly PageCache pageCache;
 
-    ReadOnlyDatabase(Catalog catalog, IStorage storage, int pageCacheCapacity)
+    ReadOnlyDatabase(Catalog catalog, IPageLoader pageLoader, int pageCacheCapacity)
     {
         Catalog = catalog;
-        this.storage = storage;
-        pageCache = new PageCache(storage, pageCacheCapacity, catalog.Filters?.ToArray() ?? []);
+        this.pageLoader = pageLoader;
+        pageCache = new PageCache(pageLoader, pageCacheCapacity, catalog.Filters?.ToArray() ?? []);
     }
 
     public void Dispose()
     {
         pageCache.Dispose();
-        storage.Dispose();
+        pageLoader.Dispose();
     }
 
     public ReadOnlyTable GetTable(string name)

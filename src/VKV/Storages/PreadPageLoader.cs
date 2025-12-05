@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
+using VKV.BTree;
 using VKV.Internal;
 #if NET7_0_OR_GREATER
 using static System.Runtime.InteropServices.MemoryMarshal;
@@ -16,7 +17,7 @@ using static System.Runtime.CompilerServices.MemoryMarshalEx;
 
 namespace VKV.Storages;
 
-public sealed class PreadStorage(SafeFileHandle handle) : IStorage
+public sealed class PreadPageLoader(SafeFileHandle handle) : IPageLoader
 {
     public void Dispose() => handle.Dispose();
 
@@ -36,13 +37,13 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
             throw new EndOfStreamException();
         }
 
-        var payloadLength = Unsafe.ReadUnaligned<int>(ref GetArrayDataReference(lengthBuffer));
+        var pageLength = Unsafe.ReadUnaligned<int>(ref GetArrayDataReference(lengthBuffer));
 
         var bytesRead = 0;
-        var destination = MemoryPool<byte>.Shared.Rent(payloadLength);
-        while (bytesRead < payloadLength)
+        var destination = MemoryPool<byte>.Shared.Rent(pageLength);
+        while (bytesRead < pageLength)
         {
-            var buffer = destination.Memory[bytesRead..(payloadLength - bytesRead)];
+            var buffer = destination.Memory[bytesRead..(pageLength - bytesRead)];
             n = await RandomAccess.ReadAsync(
                 handle,
                 buffer,
@@ -60,7 +61,7 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
             try
             {
                 return ApplyFilter(
-                    destination.Memory.Span[..Unsafe.SizeOf<PageHeader>()],
+                    destination.Memory.Span[..pageLength],
                     filters);
             }
             finally
@@ -98,7 +99,7 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
             try
             {
                 return ApplyFilter(
-                    destination.Memory.Span[..Unsafe.SizeOf<PageHeader>()],
+                    destination.Memory.Span[..pageLength],
                     filters);
             }
             finally
@@ -111,10 +112,15 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
 
     static IMemoryOwner<byte> ApplyFilter(ReadOnlySpan<byte> source, IPageFilter[] filters)
     {
+        var headerSize = Unsafe.SizeOf<PageHeader>() + Unsafe.SizeOf<NodeHeader>();
         var output = BufferWriterPool.Rent(source.Length);
-        output.Advance(Unsafe.SizeOf<PageHeader>());
 
-        filters[0].Decode(source[Unsafe.SizeOf<PageHeader>()..], output);
+        // copy header
+        output.Write(source[..headerSize]);
+
+        filters[0].Decode(source[headerSize..], output);
+
+        // update page header
         Unsafe.WriteUnaligned(
             ref MemoryMarshal.GetReference(output.WrittenSpan),
             new PageHeader { PageSize = output.WrittenCount });
@@ -130,8 +136,13 @@ public sealed class PreadStorage(SafeFileHandle handle) : IStorage
 
         for (var i = 1; i < filters.Length; i++)
         {
-            output.Advance(Unsafe.SizeOf<PageHeader>());
-            filters[i].Encode(input.WrittenSpan, output);
+            // copy header
+            output.Write(source[..headerSize]);
+
+            // copy node header
+            filters[i].Encode(input.WrittenSpan[headerSize..], output);
+
+            // update page header
             Unsafe.WriteUnaligned(
                 ref MemoryMarshal.GetReference(output.WrittenSpan),
                 new PageHeader { PageSize = output.WrittenCount });

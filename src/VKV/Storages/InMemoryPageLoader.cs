@@ -9,7 +9,7 @@ using VKV.Internal;
 
 namespace VKV.Storages;
 
-public class InMemoryStorage(Memory<byte> memory) : IStorage
+public class InMemoryPageLoader(Memory<byte> memory) : IPageLoader
 {
     public void Dispose()
     {
@@ -45,7 +45,7 @@ public class InMemoryStorage(Memory<byte> memory) : IStorage
         return new ValueTask<IMemoryOwner<byte>>(destination);
     }
 
-    public IMemoryOwner<byte> ReadPage(PageNumber pageNumber, IPageFilter[] filters)
+    public IMemoryOwner<byte> ReadPage(PageNumber pageNumber, IPageFilter[]? filters)
     {
         var pageLength = Unsafe.ReadUnaligned<int>(
             ref Unsafe.Add(

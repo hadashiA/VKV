@@ -57,7 +57,7 @@ public sealed class PageCache : IDisposable
     readonly MpscRingQueue<Entry> sQueue;
     readonly MpscRingQueue<Entry> mQueue;
 
-    readonly IStorage storage;
+    readonly IPageLoader pageLoader;
     readonly int capacity;
     readonly IPageFilter[]? filters;
     readonly int sTargetSize;
@@ -69,13 +69,13 @@ public sealed class PageCache : IDisposable
     bool disposed;
 
     internal PageCache(
-        IStorage storage,
+        IPageLoader pageLoader,
         int capacity,
         IPageFilter[]? filters,
         double smallFraction = 0.1,
         double ghostFraction = 1.0)
     {
-        this.storage = storage;
+        this.pageLoader = pageLoader;
         this.capacity = capacity;
         this.filters = filters;
 
@@ -135,13 +135,13 @@ public sealed class PageCache : IDisposable
 
     public void Load(PageNumber pageNumber)
     {
-        var buffer = storage.ReadPage(pageNumber);
+        var buffer = pageLoader.ReadPage(pageNumber);
         AddEntry(pageNumber, buffer);
     }
 
     public async ValueTask LoadAsync(PageNumber pageNumber, CancellationToken cancellationToken = default)
     {
-        var buffer = await storage.ReadPageAsync(pageNumber, filters, cancellationToken);
+        var buffer = await pageLoader.ReadPageAsync(pageNumber, filters, cancellationToken);
         AddEntry(pageNumber, buffer);
     }
 
