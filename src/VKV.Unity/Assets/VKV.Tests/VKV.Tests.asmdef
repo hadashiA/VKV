@@ -12,7 +12,9 @@
     "overrideReferences": true,
     "precompiledReferences": [
         "nunit.framework.dll",
-        "VKV.dll"
+        "VKV.dll",
+        "VKV.Compression.dll",
+        "NativeCompressions.Zstandard.Core.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

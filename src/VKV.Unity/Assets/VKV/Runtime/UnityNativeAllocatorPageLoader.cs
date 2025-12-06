@@ -13,9 +13,9 @@ using UnityEngine;
 
 namespace VKV.Unity
 {
-    public class UnityNativeAllocatorFileStorageException : Exception
+    public class UnityNativeAllocatorPageLoaderException : Exception
     {
-        public UnityNativeAllocatorFileStorageException(string message) : base(message) { }
+        public UnityNativeAllocatorPageLoaderException(string message) : base(message) { }
     }
 
     public class UnityNativeAllocatorPageLoader : IPageLoader
@@ -83,30 +83,17 @@ namespace VKV.Unity
                     1);
             }
 
-            while (!cancellationToken.IsCancellationRequested)
+            await Awaitable.BackgroundThreadAsync();
+            try
             {
-                var status = handle.Status;
-                switch (status)
-                {
-                    case ReadStatus.Complete:
-                    case ReadStatus.Truncated:
-                        handle.Dispose();
-                        goto Result;
-                    case ReadStatus.InProgress:
-                        await Awaitable.NextFrameAsync(cancellationToken);
-                        break;
-                    case ReadStatus.Failed:
-                        handle.Dispose();
-                        throw new UnityNativeAllocatorFileStorageException($"Failed to read {filePath}: {status}");
-                    case ReadStatus.Canceled:
-                        handle.Dispose();
-                        throw new OperationCanceledException();
-                    default:
-                        handle.Dispose();
-                        throw new ArgumentOutOfRangeException();
-                }
+                handle.JobHandle.Complete();
             }
-            Result:
+            finally
+            {
+                handle.Dispose();
+            }
+            await Awaitable.MainThreadAsync();
+
             if (filters is { Length: > 0 })
             {
                 return ApplyFilter(buffer, filters);
@@ -147,7 +134,7 @@ namespace VKV.Unity
             }
         }
 
-        IMemoryOwner<byte> ApplyFilter(NativeArray<byte> source, IPageFilter[] filters)
+        NativeArrayMemoryManager<byte> ApplyFilter(NativeArray<byte> source, IPageFilter[] filters)
         {
             var sourceSpan = source.AsSpan();
             var headerSize = this.GetTotalPageHeaderSize();
