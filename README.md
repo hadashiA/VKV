@@ -17,21 +17,22 @@ VKV is a red-only embedded B+Tree based key/value database, implemented pure C#.
 - B+Tree based query
   - Read a value by primary key 
   - Read values by key range
-  - Count
-  - Secondary index
+  - Count by key range
+  - Secondary index (wip)
 - Multiple Tables
 - Support async/sync
 - Unity Integration
-  - AsyncReadManager + NativeArray<byte> based optimized custom loader.     
+  - AsyncReadManager + `NativeArray<byte>` based optimized custom loader.     
 - Page filter
-  - aa
-  - custom page filter 
+  - Built-in filters
+      - Cysharp/NativeCompression based page compression.
+  - We can write custom filters in C#.
+- Iterator API
+  - By manipulating the cursor, large areas can be accessed sequentially.
 - TODO
-  - Cysharp/NativeCompression based page compress
   - Read values by key prefix
   - C# Driect Serialization
   - Multiple table JOINs
-  - Full scan (RangeIterator)
   - Cli tools
 
 ## Why read-only ?
@@ -87,9 +88,19 @@ using var range = table.GetRange(
     startKey: "key1"u8, 
     endKey: "key3"u8,
     startKeyExclusive: false,
-    endKeyExclusive: false);
+    endKeyExclusive: false,
+    sortOrder: SortOrder.Ascending);
     
 range.Count //=> 3
+
+// greater than 
+using var range = table.GetRange("key1"u8, KeyRange.Unbound, startKeyExclusive: true);
+
+// greater than or equals
+using var range = table.GetRange("key1"u8, KeyRange.Unbound, startKeyExclusive: false);
+
+// less than
+using var range = table.GetRange("key1"u8, KeyRange.Unbound, startKeyExclusive: false, sortOrder: SortOrder.Descending);
 
 // count
 var count = table.CountRange("key1", "key3", 
