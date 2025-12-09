@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -40,6 +41,15 @@ public class ReadOnlyTable : IKeyValueStore
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SingleValueResult Get(ReadOnlySpan<byte> key) => primaryKeyTree.Get(key);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SingleValueResult Get(long key)
+    {
+        KeyEncodingMismatchException.ThrowIfCannotEncodeInt64(KeyEncoding);
+        Span<byte> keyBuffer = stackalloc byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64LittleEndian(keyBuffer, key);
+        return Get(keyBuffer);
+    }
 
     /// <summary>
     /// Find value by key.

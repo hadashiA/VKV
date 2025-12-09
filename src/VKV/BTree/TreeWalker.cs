@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -20,6 +21,8 @@ class TreeWalker
     public PageCache PageCache { get; }
     public IKeyEncoding KeyEncoding { get; }
 
+    readonly IKeyEncoding comparer;
+
     internal TreeWalker(
         PageNumber rootPageNumber,
         PageCache pageCache,
@@ -28,6 +31,15 @@ class TreeWalker
         RootPageNumber = rootPageNumber;
         PageCache = pageCache;
         KeyEncoding = keyEncoding;
+
+        // optimize
+        comparer = keyEncoding switch
+        {
+            AsciiOrdinalEncoding => AsciiOrdinalEncoding.Instance,
+            Utf8OrdinalEncoding => Utf8OrdinalEncoding.Instance,
+            Int64LittleEndianEncoding => Int64LittleEndianEncoding.Instance,
+            _ => keyEncoding
+        };
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -490,7 +502,7 @@ class TreeWalker
             if (header.Kind == NodeKind.Internal)
             {
                 var internalNode = new InternalNodeReader(pageSpan, header.EntryCount);
-                if (!internalNode.TrySearch(key, KeyEncoding, out pageNumber))
+                if (!internalNode.TrySearch(key, comparer, out pageNumber))
                 {
                     page.Release();
                     index = default;
@@ -505,7 +517,7 @@ class TreeWalker
                 nextPageNumber = null;
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                if (leafNode.TrySearch(key, op, KeyEncoding, out index))
+                if (leafNode.TrySearch(key, op, comparer, out index))
                 {
                     return true;
                 }

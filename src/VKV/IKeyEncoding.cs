@@ -17,7 +17,7 @@ public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
 
 public static class KeyEncoding
 {
-    public static Int64LittleEndianEncoding Int64LittleEndinan => Int64LittleEndianEncoding.Instance;
+    public static Int64LittleEndianEncoding Int64LittleEndian => Int64LittleEndianEncoding.Instance;
     public static AsciiOrdinalEncoding Ascii => AsciiOrdinalEncoding.Instance;
     public static Utf8OrdinalEncoding Utf8 => Utf8OrdinalEncoding.Instance;
 
