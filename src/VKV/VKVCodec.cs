@@ -8,7 +8,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using VKV.BTree;
 
 namespace VKV;
 
@@ -28,10 +27,11 @@ namespace VKV;
 //     name_length(4): int
 //     name(name_length): utf8
 //     Index(Primary Key):
-//       name_length(4): in5
+//       name_length(2): ushort
+//       key_encoding_id_length(2): ushort
 //       name(name_length): utf8
+//       key_encoding_id(name_length): utf8
 //       is_unique(1): bool
-//       key_encoding(1): enum
 //       value_kind(1): enum
 //       root_position(8): long
 //     index_count(2): ushort
@@ -87,7 +87,7 @@ public struct PageHeader
 
 public class StorageFormatException(string message) : Exception(message);
 
-static class BinaryFormatter
+static class VKVCodec
 {
     // TODO: Integrate the builder into this class.
 
@@ -199,27 +199,24 @@ static class BinaryFormatter
 
     static async ValueTask<IndexDescriptor> ParseIndexDescriptorAsync(Stream stream, CancellationToken cancellationToken = default)
     {
-        int indexNameLength;
-        int bytesRead;
-        var buffer = ArrayPool<byte>.Shared.Rent(sizeof(int));
-        try
-        {
-            bytesRead = await stream.ReadAtLeastAsync(buffer, sizeof(int), cancellationToken: cancellationToken);
-            indexNameLength = BinaryPrimitives.ReadInt32LittleEndian(buffer);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-        stream.Seek(-(bytesRead - sizeof(int)), SeekOrigin.Current);
+        var buffer = ArrayPool<byte>.Shared.Rent(sizeof(ushort));
+
+        var bytesRead = await stream.ReadAtLeastAsync(buffer, sizeof(ushort) * 2, cancellationToken: cancellationToken);
+        var indexNameLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer);
+        var keyEncodingIdLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer[sizeof(ushort)..]);
+        stream.Seek(-(bytesRead - sizeof(ushort) * 2), SeekOrigin.Current);
+
+        ArrayPool<byte>.Shared.Return(buffer);
 
         string indexName;
-        var remaining = indexNameLength + 1 + 1 + 1 + sizeof(ulong);
+        string keyEncodingId;
+        var remaining = indexNameLength + keyEncodingIdLength + 1 + 1 + sizeof(ulong);
         buffer = ArrayPool<byte>.Shared.Rent(remaining);
         try
         {
             bytesRead = await stream.ReadAtLeastAsync(buffer, remaining, cancellationToken: cancellationToken);
             indexName = Encoding.UTF8.GetString(buffer[..indexNameLength]);
+            keyEncodingId = Encoding.UTF8.GetString(buffer[indexNameLength..(indexNameLength + keyEncodingIdLength)]);
         }
         finally
         {
@@ -227,10 +224,12 @@ static class BinaryFormatter
         }
         stream.Seek(-(bytesRead - remaining), SeekOrigin.Current);
 
-        var isUnique = buffer[indexNameLength] == 1;
-        var keyEncoding = (KeyEncoding)buffer[indexNameLength + 1];
-        var valueKind = (ValueKind)buffer[indexNameLength + 2];
-        var rootPosition = BinaryPrimitives.ReadInt64LittleEndian(buffer[(indexNameLength + 3)..]);
+        var keyEncoding = KeyEncoding.FromId(keyEncodingId);
+
+        var offset = indexNameLength + keyEncodingIdLength ;
+        var isUnique = buffer[offset] == 1;
+        var valueKind = (ValueKind)buffer[offset + 1];
+        var rootPosition = BinaryPrimitives.ReadInt64LittleEndian(buffer.AsSpan(offset + 2));
 
         return new IndexDescriptor
         {

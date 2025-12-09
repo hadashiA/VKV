@@ -1,5 +1,3 @@
-using System;
-
 namespace VKV;
 
 public enum SortOrder
@@ -8,8 +6,7 @@ public enum SortOrder
     Descending,
 }
 
-// public readonly readonly struct KeyRange()
-
-// public readonly record struct QueryParameters
-// {
-// }
+public static class KeyRange
+{
+    public static byte[] Unbound => [];
+}

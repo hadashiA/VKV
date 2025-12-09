@@ -45,7 +45,7 @@ public sealed class ReadOnlyDatabase : IDisposable
     public static async ValueTask<ReadOnlyDatabase> OpenAsync(Stream stream, DatabaseLoadOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= DatabaseLoadOptions.Default;
-        var catalog = await BinaryFormatter.ParseCatalogAsync(stream, cancellationToken);
+        var catalog = await VKVCodec.ParseCatalogAsync(stream, cancellationToken);
         var storage = options.StorageFactory.Invoke(stream, catalog.PageSize);
         return new ReadOnlyDatabase(catalog, storage, options.PageCacheCapacity);
     }

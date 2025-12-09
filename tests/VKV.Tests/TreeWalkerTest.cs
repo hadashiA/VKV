@@ -237,7 +237,7 @@ public class TreeWalkerTest
 
         using var result1 = await tree.GetRangeAsync(
             "key9"u8.ToArray(),
-            null,
+            KeyRange.Unbound,
             startKeyExclusive: true);
 
         Assert.That(result1.Count, Is.EqualTo(0));

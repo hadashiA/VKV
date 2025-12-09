@@ -24,7 +24,7 @@ public class DatabaseBuilderTest
         await builder.BuildToStreamAsync(memoryStream);
 
         memoryStream.Seek(0, SeekOrigin.Begin);
-        var catalog = await BinaryFormatter.ParseCatalogAsync(memoryStream);
+        var catalog = await VKVCodec.ParseCatalogAsync(memoryStream);
         Assert.That(catalog.PageSize, Is.EqualTo(4096));
         Assert.That(catalog.TableDescriptors.Count, Is.EqualTo(1) );
         Assert.That(catalog.TableDescriptors["items"].Name, Is.EqualTo("items"));
@@ -62,7 +62,7 @@ public class DatabaseBuilderTest
         await builder.BuildToStreamAsync(memoryStream);
 
         memoryStream.Seek(0, SeekOrigin.Begin);
-        var catalog = await BinaryFormatter.ParseCatalogAsync(memoryStream);
+        var catalog = await VKVCodec.ParseCatalogAsync(memoryStream);
         Assert.That(catalog.Filters!.Count, Is.EqualTo(1));
         Assert.That(catalog.Filters[0], Is.InstanceOf<ZstdCompressionPageFilter>());
     }

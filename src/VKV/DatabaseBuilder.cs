@@ -10,6 +10,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using VKV.BTree;
 using VKV.Internal;
+#if NET7_0_OR_GREATER
+using static System.Runtime.InteropServices.MemoryMarshal;
+#else
+using static System.Runtime.CompilerServices.MemoryMarshalEx;
+#endif
 
 namespace VKV;
 
@@ -18,7 +23,7 @@ public abstract class IndexOptions(string name, bool isUnique)
     public string Name => name;
     public bool IsUnique => isUnique;
 
-    public KeyEncoding KeyEncoding { get; set; } = KeyEncoding.Ascii;
+    public IKeyEncoding KeyEncoding { get; set; } = VKV.KeyEncoding.Ascii;
     public abstract ValueKind ValueKind { get; }
 }
 
@@ -49,7 +54,7 @@ public class TableBuilder
 {
     readonly string name;
     readonly int pageSize;
-    public KeyEncoding PrimaryKeyEncoding { get; set; }
+    public IKeyEncoding PrimaryKeyEncoding { get; set; }
     public IReadOnlyList<SecondaryIndexOptions> SecondaryIndexOptions => secondaryIndexOptions;
 
     readonly List<SecondaryIndexOptions> secondaryIndexOptions = [];
@@ -58,7 +63,7 @@ public class TableBuilder
 
     internal TableBuilder(
         string name,
-        KeyEncoding primaryKeyEncoding,
+        IKeyEncoding primaryKeyEncoding,
         int pageSize,
         IReadOnlyList<IPageFilter>? pageFilters)
     {
@@ -72,7 +77,7 @@ public class TableBuilder
     public void AddSecondaryIndex(
         string indexName,
         bool isUnique,
-        KeyEncoding keyEncoding,
+        IKeyEncoding keyEncoding,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> valueToIndexFactory)
     {
         secondaryIndexOptions.Add(new SecondaryIndexOptions(indexName, isUnique)
@@ -98,22 +103,15 @@ public class TableBuilder
 
     public void Append(string key, ReadOnlyMemory<byte> value)
     {
-        var encoding = PrimaryKeyEncoding switch
-        {
-            KeyEncoding.Ascii => Encoding.ASCII,
-            KeyEncoding.Utf8 => Encoding.UTF8,
-            _ => throw new NotSupportedException($"{PrimaryKeyEncoding} is not string")
-        };
+        var encoding = PrimaryKeyEncoding.ToTextEncoding();
         Append(encoding.GetBytes(key), value);
     }
 
     public void Append(long key, ReadOnlyMemory<byte> value)
     {
-        if (PrimaryKeyEncoding != KeyEncoding.Int64LittleEndian)
-        {
-            throw new NotSupportedException($"{PrimaryKeyEncoding} is not Int64LittleEndian");
-        }
-        var buffer = new byte[8];
+        KeyEncodingMismatchException.ThrowIfCannotEncodeInt64(PrimaryKeyEncoding);
+
+        var buffer = new byte[sizeof(long)];
         BinaryPrimitives.WriteInt64LittleEndian(buffer, key);
         Append(buffer, value);
     }
@@ -188,60 +186,41 @@ public class TableBuilder
         CancellationToken cancellationToken = default)
     {
         var indexNameUtf8 = Encoding.UTF8.GetBytes(indexOptions.Name);
-        var descriptorLength = sizeof(int) + indexNameUtf8.Length + 1 + 1 + 1 + sizeof(long);
+        var keyEncodingIdUtf8 = Encoding.UTF8.GetBytes(indexOptions.KeyEncoding.Id);
+        var descriptorLength = sizeof(ushort) * 2 + indexNameUtf8.Length + keyEncodingIdUtf8.Length + 1 + 1 + sizeof(long);
 
         var buffer = ArrayPool<byte>.Shared.Rent(descriptorLength);
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, indexNameUtf8.Length);
 
-        var offset = sizeof(int);
-        indexNameUtf8.CopyTo(buffer.AsSpan(offset));
-        offset += indexNameUtf8.Length;
+        ref var bufferRef = ref GetArrayDataReference(buffer);
 
-        buffer[offset++] = (byte)(indexOptions.IsUnique ? 1 : 0);
-        buffer[offset++] = (byte)indexOptions.KeyEncoding;
-        buffer[offset++] = (byte)indexOptions.ValueKind;
+        Unsafe.WriteUnaligned(ref bufferRef, (ushort)indexNameUtf8.Length);
+        bufferRef = ref Unsafe.Add(ref bufferRef, sizeof(ushort));
 
-        var payloadPosition = stream.Position + descriptorLength;
-        BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(offset), payloadPosition);
+        Unsafe.WriteUnaligned(ref bufferRef, (ushort)keyEncodingIdUtf8.Length);
+        bufferRef = ref Unsafe.Add(ref bufferRef, sizeof(ushort));
 
-        await stream.WriteAsync(buffer.AsMemory(0, descriptorLength), cancellationToken);
-    }
+        Unsafe.CopyBlock(
+            ref bufferRef,
+            ref GetArrayDataReference(indexNameUtf8),
+            (uint)indexNameUtf8.Length);
+        bufferRef = ref Unsafe.Add(ref bufferRef, indexNameUtf8.Length);
 
-    async ValueTask WriteIndexAsync(
-        Stream stream,
-        IndexOptions indexOptions,
-        KeyValueList keyValues,
-        CancellationToken cancellationToken = default)
-    {
-        var indexNameUtf8 = Encoding.UTF8.GetBytes(indexOptions.Name);
-        var descriptorLength = sizeof(int) + indexNameUtf8.Length + 1 + 1 + 1 + sizeof(long);
+        Unsafe.CopyBlock(
+            ref bufferRef,
+            ref GetArrayDataReference(keyEncodingIdUtf8),
+            (uint)keyEncodingIdUtf8.Length);
+        bufferRef = ref Unsafe.Add(ref bufferRef, keyEncodingIdUtf8.Length);
 
-        var buffer = ArrayPool<byte>.Shared.Rent(descriptorLength);
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, indexNameUtf8.Length);
+        bufferRef = (byte)(indexOptions.IsUnique ? 1 : 0);
+        bufferRef = ref Unsafe.Add(ref bufferRef, 1);
 
-        var offset = sizeof(int);
-        indexNameUtf8.CopyTo(buffer.AsSpan(offset));
-        offset += indexNameUtf8.Length;
-
-        buffer[offset++] = (byte)(indexOptions.IsUnique ? 1 : 0);
-        buffer[offset++] = (byte)indexOptions.KeyEncoding;
-        buffer[offset++] = (byte)indexOptions.ValueKind;
+        bufferRef = (byte)indexOptions.ValueKind;
+        bufferRef = ref Unsafe.Add(ref bufferRef, 1);
 
         var payloadPosition = stream.Position + descriptorLength;
-        BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(offset), payloadPosition);
+        Unsafe.WriteUnaligned(ref bufferRef, payloadPosition);
 
         await stream.WriteAsync(buffer.AsMemory(0, descriptorLength), cancellationToken);
-
-        var rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
-        var lastPosition = stream.Position;
-
-        // write root position
-        stream.Seek(payloadPosition - sizeof(long), SeekOrigin.Begin);
-        BinaryPrimitives.WriteInt64LittleEndian(buffer, rootPosition.Value);
-        await stream.WriteAsync(buffer.AsMemory(0, sizeof(long)), cancellationToken);
-
-        // seek to last
-        stream.Seek(lastPosition, SeekOrigin.Begin);
     }
 
     PrimaryKeyIndexOptions GetPrimaryKeyIndexOptions()
@@ -267,7 +246,12 @@ public class DatabaseBuilder : IDisposable
         configure.Invoke(filterOptions);
     }
 
-    public TableBuilder CreateTable(string name, KeyEncoding primaryKeyEncoding = KeyEncoding.Ascii)
+    public TableBuilder CreateTable(string name)
+    {
+        return CreateTable(name, AsciiOrdinalEncoding.Instance);
+    }
+
+    public TableBuilder CreateTable(string name, IKeyEncoding primaryKeyEncoding)
     {
         var tableBuilder = new TableBuilder(name, primaryKeyEncoding, PageSize, filterOptions?.Filters);
         tableBuilders.Add(tableBuilder);
