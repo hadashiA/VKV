@@ -1,32 +1,64 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace VKV;
 
-public interface IKeyComparer
+public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
 {
+    string Id { get; }
+
+    bool IsSupportedType(Type type);
     int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b);
 }
 
-public static class KeyComparer
+public static class KeyEncoding
 {
-    public static IKeyComparer From(KeyEncoding encoding)
+    public static Int64LittleEndianEncoding Int64LittleEndinan => Int64LittleEndianEncoding.Instance;
+    public static AsciiOrdinalEncoding Ascii => AsciiOrdinalEncoding.Instance;
+    public static Utf8OrdinalEncoding Utf8 => Utf8OrdinalEncoding.Instance;
+
+    static readonly ConcurrentDictionary<string, IKeyEncoding> registry = new();
+
+    public static IKeyEncoding FromId(string id)
     {
-        return encoding switch
+        return id switch
         {
-            KeyEncoding.Ascii => AsciiOrdinalComparer.Instance,
-            KeyEncoding.Utf8 => Utf8OrdinalComparer.Instance,
-            KeyEncoding.Int64LittleEndian => Int64LittleEndianComparer.Instance,
-            _ => throw new ArgumentOutOfRangeException(nameof(encoding), encoding, null)
+            "i64" => Int64LittleEndianEncoding.Instance,
+            "ascii" => AsciiOrdinalEncoding.Instance,
+            "u8" => Utf8OrdinalEncoding.Instance,
+            _ => registry[id]
         };
     }
+
+    public static void Register(IKeyEncoding customEncoding)
+    {
+        if (!registry.TryAdd(customEncoding.Id, customEncoding))
+        {
+            throw new ArgumentException($"The encoding {customEncoding.Id} already exists.");
+        }
+    }
+
+    public static Encoding ToTextEncoding(this IKeyEncoding keyEncoding) => keyEncoding switch
+    {
+        AsciiOrdinalEncoding => Encoding.ASCII,
+        Utf8OrdinalEncoding => Encoding.UTF8,
+        _ => throw new NotSupportedException($"{keyEncoding} cannot be used with string")
+    };
 }
 
-public sealed class Int64LittleEndianComparer : IKeyComparer, IComparer<ReadOnlyMemory<byte>>
+public sealed class Int64LittleEndianEncoding : IKeyEncoding
 {
-    public static readonly IKeyComparer Instance = new Int64LittleEndianComparer();
+    public static readonly Int64LittleEndianEncoding Instance = new();
+
+    public string Id => "i64";
+
+    public bool IsSupportedType(Type type) => type == typeof(long) ||
+                                              type == typeof(int) ||
+                                              type == typeof(short);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
@@ -45,9 +77,13 @@ public sealed class Int64LittleEndianComparer : IKeyComparer, IComparer<ReadOnly
     }
 }
 
-public sealed class AsciiOrdinalComparer : IKeyComparer, IComparer<ReadOnlyMemory<byte>>
+public sealed class AsciiOrdinalEncoding : IKeyEncoding
 {
-    public static readonly IKeyComparer Instance = new AsciiOrdinalComparer();
+    public static readonly AsciiOrdinalEncoding Instance = new();
+
+    public string Id => "ascii";
+
+    public bool IsSupportedType(Type type) => type == typeof(string);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
@@ -62,9 +98,13 @@ public sealed class AsciiOrdinalComparer : IKeyComparer, IComparer<ReadOnlyMemor
     }
 }
 
-public sealed class Utf8OrdinalComparer : IKeyComparer, IComparer<ReadOnlyMemory<byte>>
+public sealed class Utf8OrdinalEncoding : IKeyEncoding
 {
-    public static readonly IKeyComparer Instance = new Utf8OrdinalComparer();
+    public static readonly Utf8OrdinalEncoding Instance = new();
+
+    public string Id => "u8";
+
+    public bool IsSupportedType(Type type) => type == typeof(string);
 
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
     {
@@ -72,7 +112,6 @@ public sealed class Utf8OrdinalComparer : IKeyComparer, IComparer<ReadOnlyMemory
 
         while (ia < a.Length && ib < b.Length)
         {
-            // ASCII 連続領域はバイト比較で前倒し
             while (ia < a.Length && ib < b.Length)
             {
                 var ba = a[ia];
@@ -86,7 +125,7 @@ public sealed class Utf8OrdinalComparer : IKeyComparer, IComparer<ReadOnlyMemory
                     ia++; ib++;
                     continue;
                 }
-                break; // どちらか非ASCII
+                break;
             }
 
             if (ia >= a.Length || ib >= b.Length) break;
@@ -118,7 +157,6 @@ public sealed class Utf8OrdinalComparer : IKeyComparer, IComparer<ReadOnlyMemory
             // ib += cb;
         }
 
-        // 先頭一致だったので長さで決着
         return (a.Length - ia) - (b.Length - ib);
     }
 

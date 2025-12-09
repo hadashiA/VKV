@@ -12,6 +12,7 @@ public class ReadOnlyTableTest
     public async Task Get()
     {
         var table = await TestHelper.BuildTableAsync(
+            KeyEncoding.Ascii,
             databaseConfigure: builder =>
             {
                 builder.PageSize = 128;
@@ -38,6 +39,7 @@ public class ReadOnlyTableTest
     public async Task GetCompressed()
     {
         var table = await TestHelper.BuildTableAsync(
+            KeyEncoding.Ascii,
             databaseConfigure: builder =>
             {
                 builder.PageSize = 128;

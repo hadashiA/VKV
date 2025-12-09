@@ -26,7 +26,7 @@ static class TestHelper
     }
 
     public static async ValueTask<ReadOnlyTable> BuildTableAsync(
-        KeyEncoding keyEncoding = KeyEncoding.Ascii,
+        IKeyEncoding keyEncoding,
         DatabaseLoadOptions? loadOptions = null,
         Action<DatabaseBuilder>? databaseConfigure = null,
         Action<TableBuilder>? tableConfigure = null)
@@ -45,25 +45,6 @@ static class TestHelper
         return database.GetTable("items");
     }
 
-    public static KeyValueList CreateKeyValues(int size, KeyEncoding keyEncoding = KeyEncoding.Ascii)
-    {
-        var keyValues = new KeyValueList(keyEncoding);
-        if (keyEncoding == KeyEncoding.Int64LittleEndian)
-        {
-            for (var i = 0; i < size; i++)
-            {
-                keyValues.Add(i, "value01"u8.ToArray());
-            }
-        }
-        else
-        {
-            for (var i = 0; i < size; i++)
-            {
-                keyValues.Add("key01"u8.ToArray(), "value01"u8.ToArray());
-            }
-        }
-        return keyValues;
-    }
 
     static void AddUtf8KeyValues(TableBuilder tableBuilder, int size)
     {

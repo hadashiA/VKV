@@ -63,12 +63,12 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
 
     public bool TryFindValue(
         scoped ReadOnlySpan<byte> key,
-        IKeyComparer keyComparer,
+        IKeyEncoding keyEncoding,
         out int valueOffset,
         out ushort valueLength,
         out ushort valueIndex)
     {
-        if (TrySearch(key, SearchOperator.Equal, keyComparer, out var index))
+        if (TrySearch(key, SearchOperator.Equal, keyEncoding, out var index))
         {
             var meta = GetMeta(index);
             valueOffset = meta.PageOffset + meta.KeyLength;
@@ -86,7 +86,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
     public bool TrySearch(
         ReadOnlySpan<byte> key,
         SearchOperator op,
-        IKeyComparer keyComparer,
+        IKeyEncoding keyEncoding,
         out int index)
     {
         var min = 0;
@@ -108,7 +108,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
 
             var midKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, midMeta.KeyLength);
 
-            var compared = keyComparer.Compare(midKey, key);
+            var compared = keyEncoding.Compare(midKey, key);
             switch (op)
             {
                 case SearchOperator.Equal:
@@ -174,7 +174,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
 #endif
                         meta.PageOffset);
                     var foundKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
-                    if (keyComparer.Compare(foundKey, key) == 0)
+                    if (keyEncoding.Compare(foundKey, key) == 0)
                     {
                         index = min;
                         return true;

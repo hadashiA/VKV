@@ -48,7 +48,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
         childPageNumber = new PageNumber(childPosition);
     }
 
-    public bool TrySearch(ReadOnlySpan<byte> key, IKeyComparer keyComparer, out PageNumber childPageNumber)
+    public bool TrySearch(ReadOnlySpan<byte> key, IKeyEncoding keyEncoding, out PageNumber childPageNumber)
     {
         var min = 0;
         var max = entryCount;
@@ -68,7 +68,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
                 meta.PageOffset);
 
             var midKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
-            var cmp = keyComparer.Compare(midKey, key);
+            var cmp = keyEncoding.Compare(midKey, key);
             if (cmp <= 0) // upper bounds
             {
                 min = mid + 1;

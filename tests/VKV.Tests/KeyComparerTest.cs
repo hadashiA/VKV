@@ -6,7 +6,7 @@ public class KeyComparerTest
     [Test]
     public void Hoge()
     {
-        var comparer = AsciiOrdinalComparer.Instance;
+        var comparer = AsciiOrdinalEncoding.Instance;
 
         Assert.That(
             comparer.Compare(
