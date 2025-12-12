@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -57,7 +56,8 @@ class TreeWalker
         return new SingleValueResult(pageSlice, true);
     }
 
-    public async ValueTask<SingleValueResult> GetAsync(ReadOnlyMemory<byte> key,
+    public async ValueTask<SingleValueResult> GetAsync(
+        ReadOnlyMemory<byte> key,
         CancellationToken cancellationToken = default)
     {
         PageSlice resultValue;
@@ -79,26 +79,21 @@ class TreeWalker
     public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(this, iteratorDirection);
 
-    public RangeResult GetRange(
-        ReadOnlySpan<byte> startKey,
-        ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending)
+    public RangeResult GetRange(in QueryRef query)
     {
-        ValidateRange(startKey, endKey);
+        query.ValidateRange(KeyEncoding);
 
         var pageNumber = RootPageNumber;
         var index = 0;
 
         // find start position
-        if (!startKey.IsEmpty)
+        if (!query.StartKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       startKey,
-                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       query.StartKey,
+                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -139,10 +134,10 @@ class TreeWalker
                     result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
-                    if (!endKey.IsEmpty)
+                    if (!query.EndKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, endKey);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, query.EndKey);
+                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
                         {
                             return result;
                         }
@@ -168,26 +163,22 @@ class TreeWalker
     }
 
     public async ValueTask<RangeResult> GetRangeAsync(
-        ReadOnlyMemory<byte> startKey,
-        ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending,
+        Query query,
         CancellationToken cancellationToken = default)
     {
-        ValidateRange(startKey, endKey);
+        query.ValidateRange(KeyEncoding);
 
         var pageNumber = RootPageNumber;
         var index = 0;
 
         // find start position
-        if (!startKey.IsEmpty)
+        if (!query.StartKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       startKey.Span,
-                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       query.StartKey.Span,
+                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -228,10 +219,10 @@ class TreeWalker
                     result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
-                    if (!endKey.IsEmpty)
+                    if (!query.EndKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, endKey.Span);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, query.EndKey.Span);
+                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
                         {
                             return result;
                         }
@@ -256,24 +247,20 @@ class TreeWalker
         }
     }
 
-    public int CountRange(
-        ReadOnlySpan<byte> startKey,
-        ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive)
+    public int CountRange(in QueryRef query)
     {
         var pageNumber = RootPageNumber;
         var index = 0;
         var count = 0;
 
         // find start position
-        if (!startKey.IsEmpty)
+        if (!query.StartKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       startKey,
-                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       query.StartKey,
+                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -307,10 +294,10 @@ class TreeWalker
                     leafNode.GetAt(index, out var key, out _);
 
                     // check end key
-                    if (!endKey.IsEmpty)
+                    if (!query.EndKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, endKey);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, query.EndKey);
+                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
                         {
                             return count;
                         }
@@ -337,10 +324,7 @@ class TreeWalker
     }
 
     public async ValueTask<int> CountRangeAsync(
-        ReadOnlyMemory<byte> startKey,
-        ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
+        Query query,
         CancellationToken cancellationToken = default)
     {
         var pageNumber = RootPageNumber;
@@ -348,13 +332,13 @@ class TreeWalker
         var count = 0;
 
         // find start position
-        if (!startKey.IsEmpty)
+        if (!query.StartKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       startKey.Span,
-                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       query.StartKey.Span,
+                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -389,10 +373,10 @@ class TreeWalker
                     leafNode.GetAt(index, out var key, out _);
 
                     // check end key
-                    if (!endKey.IsEmpty)
+                    if (!query.EndKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, endKey.Span);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, query.EndKey.Span);
+                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
                         {
                             return count;
                         }
@@ -603,25 +587,6 @@ class TreeWalker
                 leafNode.GetAt(header.EntryCount - 1, out _, out var valuePageOffset, out var valueLength);
                 var pageSlice = new PageSlice(page, valuePageOffset, valueLength, (ushort)(header.EntryCount - 1));
                 return new SingleValueResult(pageSlice, true);
-            }
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void ValidateRange(ReadOnlyMemory<byte> start, ReadOnlyMemory<byte> end)
-    {
-        ValidateRange(start.Span, end.Span);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void ValidateRange(ReadOnlySpan<byte> start, ReadOnlySpan<byte> end)
-    {
-        if (!start.IsEmpty && !end.IsEmpty)
-        {
-            // validate start/end order
-            if (KeyEncoding.Compare(start, end) > 0)
-            {
-                throw new ArgumentException("startKey is greater than endKey");
             }
         }
     }

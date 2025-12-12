@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -9,7 +10,7 @@ using VKV.Internal;
 
 namespace VKV;
 
-public class ReadOnlyTable : IKeyValueStore
+public sealed class ReadOnlyTable : IKeyValueStore
 {
     public string Name => descriptor.Name;
     public IKeyEncoding KeyEncoding { get; }
@@ -42,13 +43,15 @@ public class ReadOnlyTable : IKeyValueStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SingleValueResult Get(ReadOnlySpan<byte> key) => primaryKeyTree.Get(key);
 
+    // optimization
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SingleValueResult Get(long key)
+    public SingleValueResult Get<TKey>(TKey key)
+        where TKey : IComparable<TKey>
     {
-        KeyEncodingMismatchException.ThrowIfCannotEncodeInt64(KeyEncoding);
-        Span<byte> keyBuffer = stackalloc byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(keyBuffer, key);
-        return Get(keyBuffer);
+        var bufferLength = KeyEncoding.GetMaxEncodedByteCount(key);
+        Span<byte> buffer = stackalloc byte[bufferLength];
+        KeyEncoding.TryEncode(key, buffer, out var bytesWritten);
+        return Get(buffer[..bytesWritten]);
     }
 
     /// <summary>
@@ -62,43 +65,72 @@ public class ReadOnlyTable : IKeyValueStore
     public ValueTask<SingleValueResult> GetAsync(ReadOnlyMemory<byte> key, CancellationToken cancellationToken = default) =>
         primaryKeyTree.GetAsync(key, cancellationToken);
 
-    public RangeResult GetRange(
-        ReadOnlySpan<byte> startKey,
-        ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending)
+    // optimization for long
+    public async ValueTask<SingleValueResult> GetAsync(long key, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        var buffer = ArrayPool<byte>.Shared.Rent(sizeof(long));
+        BinaryPrimitives.WriteInt64LittleEndian(buffer, key);
+        try
+        {
+            return await primaryKeyTree.GetAsync(buffer.AsMemory(0, sizeof(long)), cancellationToken);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
-    public ValueTask<RangeResult> GetRangeAsync(
-        ReadOnlyMemory<byte> startKey,
-        ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending,
-        CancellationToken cancellationToken = default) =>
-        primaryKeyTree.GetRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder, cancellationToken: cancellationToken);
+    public async ValueTask<SingleValueResult> GetAsync<TKey>(TKey key, CancellationToken cancellationToken = default)
+        where TKey : IComparable<TKey>
+    {
+        var initialBufferSize = KeyEncoding.GetMaxEncodedByteCount(key);
+        var buffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+        int bytesWritten;
+        while (!KeyEncoding.TryEncode(key, buffer, out bytesWritten))
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+            buffer = ArrayPool<byte>.Shared.Rent(buffer.Length * 2);
+        }
+        try
+        {
+            return await primaryKeyTree.GetAsync(buffer.AsMemory(0, bytesWritten), cancellationToken);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
 
-    public int CountRange(
-        ReadOnlySpan<byte> startKey,
-        ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false) =>
-        primaryKeyTree.CountRange(startKey, endKey, startKeyExclusive, endKeyExclusive);
+    public RangeResult GetRange(in QueryRef query) =>
+        primaryKeyTree.GetRange(query);
+
+    public RangeResult GetRange<TKey>(Query<TKey> query) where TKey : IComparable<TKey> =>
+        GetRange(query.ToEncodedQueryRef());
+
+    public ValueTask<RangeResult> GetRangeAsync(
+        Query query,
+        CancellationToken cancellationToken = default) =>
+        primaryKeyTree.GetRangeAsync(query, cancellationToken);
+
+    public ValueTask<RangeResult> GetRangeAsync<TKey>(
+        Query<TKey> query,
+        CancellationToken cancellationToken = default)
+        where TKey : IComparable<TKey> =>
+        primaryKeyTree.GetRangeAsync(
+            query.ToEncodedQuery(),
+            cancellationToken);
+
+    public int CountRange(in QueryRef query) =>
+        primaryKeyTree.CountRange(query);
 
     public ValueTask<int> CountRangeAsync(
-        ReadOnlyMemory<byte> startKey,
-        ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
+        Query query,
         CancellationToken cancellationToken = default) =>
-        primaryKeyTree.CountRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken);
+        primaryKeyTree.CountRangeAsync(query, cancellationToken);
 
     public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(primaryKeyTree, iteratorDirection);
 
-    public SecondaryIndexQuery IndexBy(string indexName) =>
+    public SecondaryIndexQuery WithIndex(string indexName) =>
         new(secondaryIndexTrees[indexName]);
 }

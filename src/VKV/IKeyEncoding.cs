@@ -11,8 +11,13 @@ public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
 {
     string Id { get; }
 
-    bool IsSupportedType(Type type);
     int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b);
+
+    int GetMaxEncodedByteCount<TKey>(TKey key)
+        where TKey : IComparable<TKey>;
+
+    bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
+        where TKey : IComparable<TKey>;
 }
 
 public static class KeyEncoding
@@ -56,9 +61,10 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
 
     public string Id => "i64";
 
-    public bool IsSupportedType(Type type) => type == typeof(long) ||
-                                              type == typeof(int) ||
-                                              type == typeof(short);
+    public void ThrowIfNotSupportedType(Type type)
+    {
+        throw new NotImplementedException();
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
@@ -66,6 +72,43 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
         var na = Unsafe.ReadUnaligned<long>(ref MemoryMarshal.GetReference(a));
         var nb = Unsafe.ReadUnaligned<long>(ref MemoryMarshal.GetReference(b));
         return (na > nb ? 1 : 0) - (na < nb ? 1 : 0);
+    }
+
+    public int GetMaxEncodedByteCount<TKey>(TKey key)
+        where TKey : IComparable<TKey> => sizeof(long);
+
+    public bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
+        where TKey : IComparable<TKey>
+    {
+        long longKey = 0;
+        switch (key)
+        {
+            case long i64:
+                longKey = i64;
+                break;
+            case int i32:
+                longKey = i32;
+                break;
+            case short i16:
+                longKey = i16;
+                break;
+            case ulong u64:
+                longKey = (long)u64;
+                break;
+            case uint u32:
+                longKey = u32;
+                break;
+            case ushort u16:
+                longKey = u16;
+                break;
+            default:
+                KeyEncodingMismatchException.ThrowCannotEncodeInt64(typeof(TKey));
+                break;
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), longKey);
+        bytesWritten = sizeof(long);
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -85,10 +128,36 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
 
     public bool IsSupportedType(Type type) => type == typeof(string);
 
+    public void ThrowIfNotSupportedType(Type type)
+    {
+        if (type != typeof(string))
+        {
+            throw new KeyEncodingMismatchException($"Cannot convert as string from {type}");
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
     {
         return a.SequenceCompareTo(b);
+    }
+
+    public int GetMaxEncodedByteCount<TKey>(TKey key) where TKey : IComparable<TKey>
+    {
+        var stringKey = Unsafe.As<TKey, string>(ref key);
+        return Encoding.ASCII.GetMaxByteCount(stringKey.Length);
+    }
+
+    public bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
+        where TKey : IComparable<TKey>
+    {
+        var stringKey = Unsafe.As<TKey, string>(ref key);
+#if NET8_0_OR_GREATER
+        return Encoding.ASCII.TryGetBytes(stringKey, destination, out bytesWritten);
+#else
+        bytesWritten = Encoding.ASCII.GetBytes(stringKey, destination);
+        return true;
+#endif
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -104,7 +173,13 @@ public sealed class Utf8OrdinalEncoding : IKeyEncoding
 
     public string Id => "u8";
 
-    public bool IsSupportedType(Type type) => type == typeof(string);
+    public void ThrowIfNotSupportedType(Type type)
+    {
+        if (type != typeof(string))
+        {
+            throw new KeyEncodingMismatchException($"Cannot convert as string from {type}");
+        }
+    }
 
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
     {
@@ -158,6 +233,24 @@ public sealed class Utf8OrdinalEncoding : IKeyEncoding
         }
 
         return (a.Length - ia) - (b.Length - ib);
+    }
+
+    public int GetMaxEncodedByteCount<TKey>(TKey key) where TKey : IComparable<TKey>
+    {
+        var stringKey = Unsafe.As<TKey, string>(ref key);
+        return Encoding.UTF8.GetMaxByteCount(stringKey.Length);
+    }
+
+    public bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
+        where TKey : IComparable<TKey>
+    {
+        var stringKey = Unsafe.As<TKey, string>(ref key);
+#if NET8_0_OR_GREATER
+        return Encoding.UTF8.TryGetBytes(stringKey, destination, out bytesWritten);
+#else
+        bytesWritten = Encoding.UTF8.GetBytes(stringKey, destination);
+        return true;
+#endif
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

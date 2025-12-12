@@ -89,31 +89,12 @@ public class TableBuilder
 
     public void Append(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value)
     {
-        if (key.Length > ushort.MaxValue)
-        {
-            throw new ArgumentException("key length must be less than 65536", nameof(key));
-        }
-        if (value.Length > ushort.MaxValue)
-        {
-            throw new ArgumentException("value length must be less than 65536", nameof(value));
-        }
-
         keyValues.Add(key, value);
     }
 
-    public void Append(string key, ReadOnlyMemory<byte> value)
+    public void Append<TKey>(TKey key, ReadOnlyMemory<byte> value) where TKey : IComparable<TKey>
     {
-        var encoding = PrimaryKeyEncoding.ToTextEncoding();
-        Append(encoding.GetBytes(key), value);
-    }
-
-    public void Append(long key, ReadOnlyMemory<byte> value)
-    {
-        KeyEncodingMismatchException.ThrowIfCannotEncodeInt64(PrimaryKeyEncoding);
-
-        var buffer = new byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(buffer, key);
-        Append(buffer, value);
+        keyValues.Add(key, value);
     }
 
     public async ValueTask BuildAsync(Stream stream, CancellationToken cancellationToken = default)
