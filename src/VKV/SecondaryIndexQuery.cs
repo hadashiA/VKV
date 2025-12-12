@@ -28,6 +28,26 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
         throw new NotImplementedException();
     }
 
+    public RangeResult GetRange(in QueryRef query)
+    {
+        throw new NotImplementedException();
+    }
+
+    public ValueTask<RangeResult> GetRangeAsync(Query query, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
+    public int CountRange(in QueryRef query)
+    {
+        throw new NotImplementedException();
+    }
+
+    public ValueTask<int> CountRangeAsync(Query query, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
     public RangeResult GetRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,

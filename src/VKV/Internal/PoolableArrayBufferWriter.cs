@@ -24,18 +24,18 @@ static class BufferWriterPool
     }
 }
 
+readonly struct PooledBuffer<T>(T[] array, int offset, int length) : IMemoryOwner<T>
+{
+    public Memory<T> Memory => new(array, offset, length);
+
+    public void Dispose()
+    {
+        ArrayPool<T>.Shared.Return(array);
+    }
+}
+
 class PoolableArrayBufferWriter<T> : IBufferWriter<T>
 {
-    sealed class PooledBuffer(T[] array) : IMemoryOwner<T>
-    {
-        public Memory<T> Memory => new(array);
-
-        public void Dispose()
-        {
-            ArrayPool<T>.Shared.Return(array);
-        }
-    }
-
     const int ArrayMaxLength = 0x7FFFFFC7;
     const int DefaultInitialBufferSize = 256;
 
@@ -97,7 +97,7 @@ class PoolableArrayBufferWriter<T> : IBufferWriter<T>
         return _buffer.AsSpan(_index);
     }
 
-    public IMemoryOwner<T> ToPoolableMemory() => new PooledBuffer(_buffer);
+    public IMemoryOwner<T> ToPoolableMemory() => new PooledBuffer<T>(_buffer, 0, _index);
 
     void CheckAndResizeBuffer(int sizeHint)
     {

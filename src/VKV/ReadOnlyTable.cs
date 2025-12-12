@@ -104,9 +104,6 @@ public sealed class ReadOnlyTable : IKeyValueStore
     public RangeResult GetRange(in QueryRef query) =>
         primaryKeyTree.GetRange(query);
 
-    public RangeResult GetRange<TKey>(Query<TKey> query) where TKey : IComparable<TKey> =>
-        GetRange(query.ToEncodedQueryRef());
-
     public ValueTask<RangeResult> GetRangeAsync(
         Query query,
         CancellationToken cancellationToken = default) =>
@@ -115,10 +112,13 @@ public sealed class ReadOnlyTable : IKeyValueStore
     public ValueTask<RangeResult> GetRangeAsync<TKey>(
         Query<TKey> query,
         CancellationToken cancellationToken = default)
-        where TKey : IComparable<TKey> =>
-        primaryKeyTree.GetRangeAsync(
-            query.ToEncodedQuery(),
+        where TKey : IComparable<TKey>
+    {
+        using var encoded = query.ToEncodedQuery(KeyEncoding);
+        return primaryKeyTree.GetRangeAsync(
+            encoded.Query,
             cancellationToken);
+    }
 
     public int CountRange(in QueryRef query) =>
         primaryKeyTree.CountRange(query);

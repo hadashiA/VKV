@@ -33,7 +33,8 @@ public static class KeyValueStoreExtensions
 
     public static async ValueTask<SingleValueResult> GetAsync<TKey>(
         this IKeyValueStore kv,
-        TKey key, CancellationToken cancellationToken = default)
+        TKey key,
+        CancellationToken cancellationToken = default)
         where TKey : IComparable<TKey>
     {
         var initialBufferSize = kv.KeyEncoding.GetMaxEncodedByteCount(key);
@@ -52,5 +53,107 @@ public static class KeyValueStoreExtensions
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
+    }
+
+    public static RangeResult GetRange<TKey>(
+        this IKeyValueStore kv,
+        in Query<TKey> query)
+        where TKey : IComparable<TKey>
+    {
+        var startKeyBuffer = query.StartKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.StartKey)]
+            : [];
+
+        var endKeyBuffer = query.EndKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.EndKey)]
+            : [];
+
+        var startKeyLength = 0;
+        var endKeyLength = 0;
+
+        if (query.StartKey is { } s)
+        {
+            while (!kv.KeyEncoding.TryEncode(s, startKeyBuffer, out startKeyLength))
+            {
+                startKeyBuffer = stackalloc byte[startKeyBuffer.Length * 2];
+            }
+        }
+        if (query.EndKey is { } e)
+        {
+            while (!kv.KeyEncoding.TryEncode(e, endKeyBuffer, out endKeyLength))
+            {
+                endKeyBuffer = stackalloc byte[endKeyBuffer.Length * 2];
+            }
+        }
+
+        return kv.GetRange(new QueryRef
+        {
+            StartKey = startKeyLength > 0 ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
+            EndKey = endKeyLength > 0 ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
+            StartKeyExclusive = query.StartKeyExclusive,
+            EndKeyExclusive = query.EndKeyExclusive,
+            SortOrder = query.SortOrder,
+        });
+    }
+
+    public static ValueTask<RangeResult> GetRangeAsync<TKey>(
+        this IKeyValueStore kv,
+        Query<TKey> query,
+        CancellationToken cancellationToken = default)
+        where TKey : IComparable<TKey>
+    {
+        using var encodedQuery = query.ToEncodedQuery(kv.KeyEncoding);
+        return kv.GetRangeAsync(encodedQuery.Query, cancellationToken);
+    }
+
+    public static int CountRange<TKey>(
+        this IKeyValueStore kv,
+        in Query<TKey> query)
+        where TKey : IComparable<TKey>
+    {
+        var startKeyBuffer = query.StartKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.StartKey)]
+            : [];
+
+        var endKeyBuffer = query.EndKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.EndKey)]
+            : [];
+
+        var startKeyLength = 0;
+        var endKeyLength = 0;
+
+        if (query.StartKey is { } s)
+        {
+            while (!kv.KeyEncoding.TryEncode(s, startKeyBuffer, out startKeyLength))
+            {
+                startKeyBuffer = stackalloc byte[startKeyBuffer.Length * 2];
+            }
+        }
+        if (query.EndKey is { } e)
+        {
+            while (!kv.KeyEncoding.TryEncode(e, endKeyBuffer, out endKeyLength))
+            {
+                endKeyBuffer = stackalloc byte[endKeyBuffer.Length * 2];
+            }
+        }
+
+        return kv.CountRange(new QueryRef
+        {
+            StartKey = startKeyLength > 0 ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
+            EndKey = endKeyLength > 0 ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
+            StartKeyExclusive = query.StartKeyExclusive,
+            EndKeyExclusive = query.EndKeyExclusive,
+            SortOrder = query.SortOrder,
+        });
+    }
+
+    public static ValueTask<int> CountRangeAsync<TKey>(
+        this IKeyValueStore kv,
+        Query<TKey> query,
+        CancellationToken cancellationToken = default)
+        where TKey : IComparable<TKey>
+    {
+        using var encodedQuery = query.ToEncodedQuery(kv.KeyEncoding);
+        return kv.CountRangeAsync(encodedQuery.Query, cancellationToken);
     }
 }

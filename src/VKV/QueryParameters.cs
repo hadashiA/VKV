@@ -46,6 +46,23 @@ public readonly partial struct Query
     }
 }
 
+public readonly struct PooledQuery(Query query, byte[]? startKeyBuffer, byte[]? endKeyBuffer) : IDisposable
+{
+    public Query Query => query;
+
+    public void Dispose()
+    {
+        if (startKeyBuffer != null)
+        {
+            ArrayPool<byte>.Shared.Return(startKeyBuffer);
+        }
+        if (endKeyBuffer != null)
+        {
+            ArrayPool<byte>.Shared.Return(endKeyBuffer);
+        }
+    }
+}
+
 public readonly struct Query<TKey> where TKey : IComparable<TKey>
 {
     public TKey? StartKey { get; init; }
@@ -64,17 +81,13 @@ public readonly struct Query<TKey> where TKey : IComparable<TKey>
         }
     }
 
-    public QueryRef ToEncodedQueryRef(IKeyEncoding keyEncoding)
+    public PooledQuery ToEncodedQuery(IKeyEncoding keyEncoding)
     {
-    }
+        ReadOnlyMemory<byte> startKey = KeyRange.Unbound;
+        ReadOnlyMemory<byte> endKey = KeyRange.Unbound;
 
-    public Query ToEncodedQuery(IKeyEncoding keyEncoding)
-    {
-        ReadOnlyMemory<byte> startKey;
-        ReadOnlyMemory<byte> endKey;
-
-        byte[]? startKeyBuffer;
-        byte[]? endKeyBuffer;
+        byte[]? startKeyBuffer = null;
+        byte[]? endKeyBuffer = null;
 
         if (StartKey != null)
         {
@@ -92,7 +105,27 @@ public readonly struct Query<TKey> where TKey : IComparable<TKey>
 
         if (EndKey != null)
         {
+            var initialBufferSize = keyEncoding.GetMaxEncodedByteCount(EndKey);
+            endKeyBuffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+
+            int bytesWritten;
+            while (!keyEncoding.TryEncode(EndKey, endKeyBuffer, out bytesWritten))
+            {
+                ArrayPool<byte>.Shared.Return(endKeyBuffer);
+                endKeyBuffer = ArrayPool<byte>.Shared.Rent(endKeyBuffer.Length * 2);
+            }
+            endKey =  endKeyBuffer.AsMemory(0, bytesWritten);
         }
+
+        var query = new Query
+        {
+            StartKey = startKey,
+            EndKey = endKey,
+            StartKeyExclusive = StartKeyExclusive,
+            EndKeyExclusive = EndKeyExclusive,
+            SortOrder = SortOrder,
+        };
+        return new PooledQuery(query, startKeyBuffer, endKeyBuffer);
     }
 }
 
@@ -118,7 +151,6 @@ public readonly ref struct QueryRef
     }
 }
 
-p
 public readonly partial struct Query
 {
     public static Query GreaterThan(
@@ -190,6 +222,17 @@ public readonly partial struct Query
         SortOrder = sortOrder
     };
 
+    public static QueryRef GreaterThanOrEqualTo(
+        ReadOnlySpan<byte> key,
+        SortOrder sortOrder = SortOrder.Ascending) => new()
+    {
+        StartKey = key,
+        EndKey = KeyRange.Unbound,
+        StartKeyExclusive = false,
+        EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
     public static QueryRef LessThan(
         ReadOnlySpan<byte> key,
         SortOrder sortOrder = SortOrder.Ascending) => new()
@@ -198,6 +241,94 @@ public readonly partial struct Query
         EndKey = key,
         StartKeyExclusive = true,
         EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
+    public static QueryRef LessThanOrEqualTo(
+        ReadOnlySpan<byte> key,
+        SortOrder sortOrder = SortOrder.Ascending) => new()
+    {
+        StartKey = KeyRange.Unbound,
+        EndKey = key,
+        StartKeyExclusive = false,
+        EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
+    public static QueryRef Between(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending) => new()
+    {
+        StartKey = startKey,
+        EndKey = endKey,
+        StartKeyExclusive = startKeyExclusive,
+        EndKeyExclusive = endKeyExclusive,
+        SortOrder = sortOrder
+    };
+
+    public static Query<TKey> GreaterThan<TKey>(
+        TKey key,
+        SortOrder sortOrder = SortOrder.Ascending)
+        where TKey : IComparable<TKey> => new()
+    {
+        StartKey = key,
+        EndKey = default,
+        StartKeyExclusive = true,
+        EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
+    public static Query<TKey> GreaterThanOrEqualTo<TKey>(
+        TKey key,
+        SortOrder sortOrder = SortOrder.Ascending)
+        where TKey : IComparable<TKey> => new()
+    {
+        StartKey = key,
+        EndKey = default,
+        StartKeyExclusive = false,
+        EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
+    public static Query<TKey> LessThan<TKey>(
+        TKey key,
+        SortOrder sortOrder = SortOrder.Ascending)
+        where TKey : IComparable<TKey> => new()
+    {
+        StartKey = default,
+        EndKey = key,
+        StartKeyExclusive = true,
+        EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
+    public static Query<TKey> LessThanOrEqualTo<TKey>(
+        TKey key,
+        SortOrder sortOrder = SortOrder.Ascending)
+        where TKey : IComparable<TKey> => new()
+    {
+        StartKey = default,
+        EndKey = key,
+        StartKeyExclusive = false,
+        EndKeyExclusive = false,
+        SortOrder = sortOrder
+    };
+
+    public static Query<TKey> Between<TKey>(
+        TKey startKey,
+        TKey endKey,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending)
+        where TKey : IComparable<TKey> => new()
+    {
+        StartKey = startKey,
+        EndKey = endKey,
+        StartKeyExclusive = startKeyExclusive,
+        EndKeyExclusive = endKeyExclusive,
         SortOrder = sortOrder
     };
 }

@@ -1,9 +1,11 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using VKV.Internal;
 
 namespace VKV;
 
@@ -47,12 +49,20 @@ public static class KeyEncoding
         }
     }
 
-    public static Encoding ToTextEncoding(this IKeyEncoding keyEncoding) => keyEncoding switch
+    internal static PooledBuffer<byte> EncodeMemory<TKey>(this IKeyEncoding keyEncoding, TKey key)
+        where TKey : IComparable<TKey>
     {
-        AsciiOrdinalEncoding => Encoding.ASCII,
-        Utf8OrdinalEncoding => Encoding.UTF8,
-        _ => throw new NotSupportedException($"{keyEncoding} cannot be used with string")
-    };
+        var initialBufferSize = keyEncoding.GetMaxEncodedByteCount(key);
+        var buffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+        int bytesWritten;
+        while (!keyEncoding.TryEncode(key, buffer, out bytesWritten))
+        {
+            var newLength = buffer.Length * 2;
+            ArrayPool<byte>.Shared.Return(buffer);
+            buffer = ArrayPool<byte>.Shared.Rent(newLength);
+        }
+        return new PooledBuffer<byte>(buffer, 0, bytesWritten);
+    }
 }
 
 public sealed class Int64LittleEndianEncoding : IKeyEncoding

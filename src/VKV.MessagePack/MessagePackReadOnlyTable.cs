@@ -57,15 +57,15 @@ public class MessagePackReadOnlyTable<TValue>(
         var list = new List<TValue>(result.Count);
         foreach (var value in result)
         {
-            var deserializedValue = MessagePackSerializer.Deserialize<TValue>(value);
+            var deserializedValue = MessagePackSerializer.Deserialize<TValue>(value, options);
             list.Add(deserializedValue);
         }
         return list;
     }
 
-    public IReadOnlyList<TValue> GetRangeAsync(in QueryRef query)
+    public async ValueTask<IReadOnlyList<TValue>> GetRangeAsync(Query query, CancellationToken cancellationToken = default)
     {
-        using var result = table.GetRange(in query);
+        using var result = await table.GetRangeAsync(query, cancellationToken);
         if (result.Count <= 0)
         {
             return [];
@@ -73,7 +73,7 @@ public class MessagePackReadOnlyTable<TValue>(
         var list = new List<TValue>(result.Count);
         foreach (var value in result)
         {
-            var deserializedValue = MessagePackSerializer.Deserialize<TValue>(value);
+            var deserializedValue = MessagePackSerializer.Deserialize<TValue>(value, options, cancellationToken);
             list.Add(deserializedValue);
         }
         return list;

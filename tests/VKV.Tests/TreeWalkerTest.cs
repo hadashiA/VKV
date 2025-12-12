@@ -235,10 +235,7 @@ public class TreeWalkerTest
                 { "key9"u8.ToArray(), "value9"u8.ToArray() },
             }, 128);
 
-        using var result1 = await tree.GetRangeAsync(
-            "key9"u8.ToArray(),
-            KeyRange.Unbound,
-            startKeyExclusive: true);
+        using var result1 = await tree.GetRangeAsync(Query.GreaterThan("key9"u8.ToArray().AsMemory()));
 
         Assert.That(result1.Count, Is.EqualTo(0));
     }
@@ -260,9 +257,9 @@ public class TreeWalkerTest
                 { "key11"u8.ToArray(), "value11"u8.ToArray() },
             }, 128);
 
-        using var result1 = await table.GetRangeAsync(
-            "key03"u8.ToArray(),
-            "key09"u8.ToArray());
+        using var result1 = await table.GetRangeAsync(Query.Between(
+            "key03"u8.ToArray().AsMemory(),
+            "key09"u8.ToArray().AsMemory()));
 
         Assert.That(result1.Count, Is.EqualTo(5));
     }

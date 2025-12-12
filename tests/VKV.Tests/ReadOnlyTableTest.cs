@@ -65,4 +65,27 @@ public class ReadOnlyTableTest
         using var result2 = await table.GetAsync("aaaaa"u8.ToArray());
         Assert.That(result2.HasValue, Is.False);
     }
+
+    [Test]
+    public async Task GetRange_Between()
+    {
+        var table = await TestHelper.BuildTableAsync(
+            KeyEncoding.Ascii,
+            databaseConfigure: builder =>
+            {
+                builder.PageSize = 128;
+            },
+            tableConfigure: builder =>
+            {
+                for (var i = 0; i < 1000; i++)
+                {
+                    builder.Append(
+                        Encoding.ASCII.GetBytes($"key{i:D5}"),
+                        Encoding.ASCII.GetBytes($"value{i:D5}"));
+                }
+            });
+
+        using var result1 = await table.GetRangeAsync(Query.Between("key0500", "key0600"));
+        Assert.That(result1.Count, Is.EqualTo(1000));
+    }
 }
