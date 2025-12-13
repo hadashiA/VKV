@@ -106,8 +106,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
         var list = new List<KeyValuePair<Memory<byte>, long>>(entryCount);
         for (var i = 0; i < entryCount; i++)
         {
-            var meta = Unsafe.ReadUnaligned<NodeEntryMeta>(
-                ref Unsafe.Add(ref ptr, i * Unsafe.SizeOf<NodeEntryMeta>()));
+            var meta = GetMeta(i);
 
             var key = MemoryMarshal.CreateReadOnlySpan(
                 ref Unsafe.Add(ref ptr, meta.PageOffset),

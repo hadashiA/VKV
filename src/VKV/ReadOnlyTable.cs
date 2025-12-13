@@ -104,26 +104,26 @@ public sealed class ReadOnlyTable : IKeyValueStore
     public RangeResult GetRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder) =>
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending) =>
         primaryKeyTree.GetRange(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder);
 
     public ValueTask<RangeResult> GetRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending,
         CancellationToken cancellationToken = default) =>
         primaryKeyTree.GetRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder, cancellationToken);
 
     public ValueTask<RangeResult> GetRangeAsync<TKey>(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending,
         CancellationToken cancellationToken = default)
         where TKey : IComparable<TKey> =>
         primaryKeyTree.GetRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder, cancellationToken);
@@ -131,15 +131,15 @@ public sealed class ReadOnlyTable : IKeyValueStore
     public int CountRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive) =>
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false) =>
         primaryKeyTree.CountRange(startKey, endKey, startKeyExclusive, endKeyExclusive);
 
     public ValueTask<int> CountRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
         CancellationToken cancellationToken = default) =>
         primaryKeyTree.CountRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken);
 

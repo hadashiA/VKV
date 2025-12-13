@@ -123,10 +123,7 @@ public class ReadOnlyTableTest
         // key050 ~ key060 (inclusive)
         using var result1 = await table.GetRangeAsync(
             "key050"u8.ToArray(),
-            "key060"u8.ToArray(),
-            startKeyExclusive: false,
-            endKeyExclusive: false,
-            SortOrder.Ascending);
+            "key060"u8.ToArray());
         Assert.That(result1.Count, Is.EqualTo(11)); // 050, 051, ..., 060
     }
 

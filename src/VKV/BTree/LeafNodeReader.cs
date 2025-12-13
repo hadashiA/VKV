@@ -131,11 +131,11 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
                     if (compared < 0)
                     {
                         min = midIndex + 1;
-                        resultIndex = min;
                     }
                     else
                     {
                         max = midIndex;
+                        resultIndex = midIndex;
                     }
                     break;
                 case SearchOperator.UpperBound:
@@ -208,13 +208,11 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
 #else
             ref pageReference;
 #endif
-        ptr = ref Unsafe.Add(ref ptr, entryCount * sizeof(int));
 
         var list = new List<KeyValuePair<Memory<byte>, Memory<byte>>>(entryCount);
         for (var i = 0; i < entryCount; i++)
         {
-            var meta = Unsafe.ReadUnaligned<NodeEntryMeta>(
-                ref Unsafe.Add(ref ptr, i * Unsafe.SizeOf<NodeEntryMeta>()));
+            var meta = GetMeta(i);
 
             var key = MemoryMarshal.CreateReadOnlySpan(
                 ref Unsafe.Add(ref ptr, meta.PageOffset),

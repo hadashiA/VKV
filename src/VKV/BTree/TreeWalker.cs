@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.Internal;
@@ -82,30 +81,42 @@ class TreeWalker
     public RangeResult GetRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder)
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending)
     {
         ValidateRange(startKey, endKey);
 
-        var pageNumber = RootPageNumber;
-        var index = 0;
+        int index;
+        IPageEntry page = default!;
 
         // find start position
-        if (!startKey.IsEmpty)
+        if (startKey.IsEmpty)
         {
-            PageNumber? nextPage = pageNumber;
+            var minValue = GetMinValue();
+            if (!minValue.HasValue)
+            {
+                return RangeResult.Empty;
+            }
+            page = minValue.Value.Page;
+            index = minValue.Value.Index;
+        }
+        else
+        {
+            PageNumber? nextPageNumber = RootPageNumber;
             while (!TrySearch(
-                       nextPage.Value,
+                       nextPageNumber.Value,
                        startKey,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
-                       out nextPage))
+                       out nextPageNumber))
             {
-                if (!nextPage.HasValue) return RangeResult.Empty;
+                if (!nextPageNumber.HasValue) return RangeResult.Empty;
 
-                PageCache.Load(nextPage.Value);
-                pageNumber = nextPage.Value;
+                while (!PageCache.TryGet(nextPageNumber.Value, out page))
+                {
+                    PageCache.Load(nextPageNumber.Value);
+                }
             }
         }
 
@@ -113,12 +124,6 @@ class TreeWalker
 
         while (true)
         {
-            IPageEntry page;
-            while (!PageCache.TryGet(pageNumber, out page))
-            {
-                PageCache.Load(pageNumber);
-            }
-
             try
             {
                 var pageSpan = page.Memory.Span;
@@ -136,17 +141,17 @@ class TreeWalker
                         out var key,
                         out var valuePageOffset,
                         out var valueLength);
-                    result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
                         var compared = KeyEncoding.Compare(key, endKey);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
                             return result;
                         }
                     }
+                    result.Add(page, valuePageOffset, valueLength);
 
                     index++;
                 }
@@ -157,7 +162,11 @@ class TreeWalker
                     return result;
                 }
 
-                pageNumber = header.RightSiblingPageNumber;
+                var pageNumber = header.RightSiblingPageNumber;
+                while (!PageCache.TryGet(pageNumber, out page))
+                {
+                    PageCache.Load(pageNumber);
+                }
                 index = 0;
             }
             finally
@@ -170,35 +179,43 @@ class TreeWalker
     public async ValueTask<RangeResult> GetRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending,
         CancellationToken cancellationToken = default)
     {
         ValidateRange(startKey, endKey);
 
-        var pageNumber = RootPageNumber;
-        var index = 0;
+        int index;
+        IPageEntry page = default!;
 
         // find start position
-        // if (startKey.IsEmpty)
-        // {
-        //     GetMinValue();
-        // }
-        // else
+        if (startKey.IsEmpty)
         {
-            PageNumber? nextPage = pageNumber;
+            var minValue = GetMinValue();
+            if (!minValue.HasValue)
+            {
+                return RangeResult.Empty;
+            }
+            page = minValue.Value.Page;
+            index = minValue.Value.Index;
+        }
+        else
+        {
+            PageNumber? nextPageNumber = RootPageNumber;
             while (!TrySearch(
-                       nextPage.Value,
+                       nextPageNumber.Value,
                        startKey.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
-                       out nextPage))
+                       out nextPageNumber))
             {
-                if (!nextPage.HasValue) return RangeResult.Empty;
+                if (!nextPageNumber.HasValue) return RangeResult.Empty;
 
-                await PageCache.LoadAsync(nextPage.Value, cancellationToken).ConfigureAwait(false);
-                pageNumber = nextPage.Value;
+                while (!PageCache.TryGet(nextPageNumber.Value, out page))
+                {
+                    await PageCache.LoadAsync(nextPageNumber.Value, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
 
@@ -206,12 +223,6 @@ class TreeWalker
 
         while (true)
         {
-            IPageEntry page;
-            while (!PageCache.TryGet(pageNumber, out page))
-            {
-                await PageCache.LoadAsync(pageNumber, cancellationToken).ConfigureAwait(false);
-            }
-
             try
             {
                 var pageSpan = page.Memory.Span;
@@ -229,17 +240,17 @@ class TreeWalker
                         out var key,
                         out var valuePageOffset,
                         out var valueLength);
-                    result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
                         var compared = KeyEncoding.Compare(key, endKey.Span);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
                             return result;
                         }
                     }
+                    result.Add(page, valuePageOffset, valueLength);
 
                     index++;
                 }
@@ -250,7 +261,11 @@ class TreeWalker
                     return result;
                 }
 
-                pageNumber = header.RightSiblingPageNumber;
+                var pageNumber = header.RightSiblingPageNumber;
+                while (!PageCache.TryGet(pageNumber, out page))
+                {
+                    await PageCache.LoadAsync(pageNumber, cancellationToken).ConfigureAwait(false);
+                }
                 index = 0;
             }
             finally
@@ -263,58 +278,71 @@ class TreeWalker
     public int CountRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive)
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false)
     {
-        var pageNumber = RootPageNumber;
-        var index = 0;
-        var count = 0;
+        ValidateRange(startKey, endKey);
 
+        IPageEntry page = default!;
+
+        int index;
         // find start position
-        if (!startKey.IsEmpty)
+        if (startKey.IsEmpty)
         {
-            PageNumber? nextPage = pageNumber;
+            var minValue = GetMinValue();
+            if (!minValue.HasValue)
+            {
+                return 0;
+            }
+            page = minValue.Value.Page;
+            index = minValue.Value.Index;
+        }
+        else
+        {
+            PageNumber? nextPageNumber = RootPageNumber;
             while (!TrySearch(
-                       nextPage.Value,
+                       nextPageNumber.Value,
                        startKey,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
-                       out nextPage))
+                       out nextPageNumber))
             {
-                if (!nextPage.HasValue) return count;
+                if (!nextPageNumber.HasValue) return 0;
 
-                PageCache.Load(nextPage.Value);
-                pageNumber = nextPage.Value;
+                while (!PageCache.TryGet(nextPageNumber.Value, out page))
+                {
+                    PageCache.Load(nextPageNumber.Value);
+                }
             }
         }
 
+        var count = 0;
+
         while (true)
         {
-            IPageEntry page;
-            while (!PageCache.TryGet(pageNumber, out page))
-            {
-                PageCache.Load(pageNumber);
-            }
-
             try
             {
-                var span = page.Memory.Span;
-                var header = Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(span));
+                var pageSpan = page.Memory.Span;
+                var header = NodeHeader.Parse(pageSpan);
                 if (header.Kind != NodeKind.Leaf)
                 {
                     throw new InvalidOperationException("Invalid node kind");
                 }
 
-                var leafNode = new LeafNodeReader(span, header.EntryCount);
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 while (index < header.EntryCount)
                 {
-                    leafNode.GetAt(index, out var key, out _);
+                    leafNode.GetAt(
+                        index,
+                        out var key,
+                        out var valuePageOffset,
+                        out var valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
                         var compared = KeyEncoding.Compare(key, endKey);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
                             return count;
                         }
@@ -330,7 +358,11 @@ class TreeWalker
                     return count;
                 }
 
-                pageNumber = header.RightSiblingPageNumber;
+                var pageNumber = header.RightSiblingPageNumber;
+                while (!PageCache.TryGet(pageNumber, out page))
+                {
+                    PageCache.Load(pageNumber);
+                }
                 index = 0;
             }
             finally
@@ -343,62 +375,72 @@ class TreeWalker
     public async ValueTask<int> CountRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
         CancellationToken cancellationToken = default)
     {
         ValidateRange(startKey, endKey);
 
-        var pageNumber = RootPageNumber;
-        var index = 0;
-        var count = 0;
+        int index;
+        IPageEntry page = default!;
 
         // find start position
-        if (!startKey.IsEmpty)
+        if (startKey.IsEmpty)
         {
-            PageNumber? nextPage = pageNumber;
+            var minValue = GetMinValue();
+            if (!minValue.HasValue)
+            {
+                return 0;
+            }
+            page = minValue.Value.Page;
+            index = minValue.Value.Index;
+        }
+        else
+        {
+            PageNumber? nextPageNumber = RootPageNumber;
             while (!TrySearch(
-                       nextPage.Value,
+                       nextPageNumber.Value,
                        startKey.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
-                       out nextPage))
+                       out nextPageNumber))
             {
-                if (!nextPage.HasValue) return count;
+                if (!nextPageNumber.HasValue) return 0;
 
-                await PageCache.LoadAsync(nextPage.Value, cancellationToken).ConfigureAwait(false);
-                pageNumber = nextPage.Value;
+                while (!PageCache.TryGet(nextPageNumber.Value, out page))
+                {
+                    await PageCache.LoadAsync(nextPageNumber.Value, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
 
+        var count = 0;
+
         while (true)
         {
-            IPageEntry page;
-            while (!PageCache.TryGet(pageNumber, out page))
-            {
-                await PageCache.LoadAsync(pageNumber, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
             try
             {
-                var span = page.Memory.Span;
-                var header = Unsafe.ReadUnaligned<NodeHeader>(ref MemoryMarshal.GetReference(span));
+                var pageSpan = page.Memory.Span;
+                var header = NodeHeader.Parse(pageSpan);
                 if (header.Kind != NodeKind.Leaf)
                 {
                     throw new InvalidOperationException("Invalid node kind");
                 }
 
-                var leafNode = new LeafNodeReader(span, header.EntryCount);
+                var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 while (index < header.EntryCount)
                 {
-                    leafNode.GetAt(index, out var key, out _);
+                    leafNode.GetAt(
+                        index,
+                        out var key,
+                        out var valuePageOffset,
+                        out var valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
                         var compared = KeyEncoding.Compare(key, endKey.Span);
-                        if (compared > 0 || (!endKeyExclusive && compared == 0))
+                        if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
                             return count;
                         }
@@ -414,7 +456,11 @@ class TreeWalker
                     return count;
                 }
 
-                pageNumber = header.RightSiblingPageNumber;
+                var pageNumber = header.RightSiblingPageNumber;
+                while (!PageCache.TryGet(pageNumber, out page))
+                {
+                    await PageCache.LoadAsync(pageNumber, cancellationToken).ConfigureAwait(false);
+                }
                 index = 0;
             }
             finally
