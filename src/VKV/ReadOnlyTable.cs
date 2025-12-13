@@ -101,32 +101,47 @@ public sealed class ReadOnlyTable : IKeyValueStore
         }
     }
 
-    public RangeResult GetRange(in QueryRef query) =>
-        primaryKeyTree.GetRange(query);
+    public RangeResult GetRange(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder) =>
+        primaryKeyTree.GetRange(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder);
 
     public ValueTask<RangeResult> GetRangeAsync(
-        Query query,
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder,
         CancellationToken cancellationToken = default) =>
-        primaryKeyTree.GetRangeAsync(query, cancellationToken);
+        primaryKeyTree.GetRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder, cancellationToken);
 
     public ValueTask<RangeResult> GetRangeAsync<TKey>(
-        Query<TKey> query,
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder,
         CancellationToken cancellationToken = default)
-        where TKey : IComparable<TKey>
-    {
-        using var encoded = query.ToEncodedQuery(KeyEncoding);
-        return primaryKeyTree.GetRangeAsync(
-            encoded.Query,
-            cancellationToken);
-    }
+        where TKey : IComparable<TKey> =>
+        primaryKeyTree.GetRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder, cancellationToken);
 
-    public int CountRange(in QueryRef query) =>
-        primaryKeyTree.CountRange(query);
+    public int CountRange(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive) =>
+        primaryKeyTree.CountRange(startKey, endKey, startKeyExclusive, endKeyExclusive);
 
     public ValueTask<int> CountRangeAsync(
-        Query query,
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
         CancellationToken cancellationToken = default) =>
-        primaryKeyTree.CountRangeAsync(query, cancellationToken);
+        primaryKeyTree.CountRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken);
 
     public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(primaryKeyTree, iteratorDirection);

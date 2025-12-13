@@ -79,21 +79,26 @@ class TreeWalker
     public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(this, iteratorDirection);
 
-    public RangeResult GetRange(in QueryRef query)
+    public RangeResult GetRange(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder)
     {
-        query.ValidateRange(KeyEncoding);
+        ValidateRange(startKey, endKey);
 
         var pageNumber = RootPageNumber;
         var index = 0;
 
         // find start position
-        if (!query.StartKey.IsEmpty)
+        if (!startKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       query.StartKey,
-                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       startKey,
+                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -134,10 +139,10 @@ class TreeWalker
                     result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
-                    if (!query.EndKey.IsEmpty)
+                    if (!endKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, query.EndKey);
-                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, endKey);
+                        if (compared > 0 || (!endKeyExclusive && compared == 0))
                         {
                             return result;
                         }
@@ -163,22 +168,30 @@ class TreeWalker
     }
 
     public async ValueTask<RangeResult> GetRangeAsync(
-        Query query,
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder,
         CancellationToken cancellationToken = default)
     {
-        query.ValidateRange(KeyEncoding);
+        ValidateRange(startKey, endKey);
 
         var pageNumber = RootPageNumber;
         var index = 0;
 
         // find start position
-        if (!query.StartKey.IsEmpty)
+        // if (startKey.IsEmpty)
+        // {
+        //     GetMinValue();
+        // }
+        // else
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       query.StartKey.Span,
-                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       startKey.Span,
+                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -219,10 +232,10 @@ class TreeWalker
                     result.Add(page, valuePageOffset, valueLength);
 
                     // check end key
-                    if (!query.EndKey.IsEmpty)
+                    if (!endKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, query.EndKey.Span);
-                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, endKey.Span);
+                        if (compared > 0 || (!endKeyExclusive && compared == 0))
                         {
                             return result;
                         }
@@ -247,20 +260,24 @@ class TreeWalker
         }
     }
 
-    public int CountRange(in QueryRef query)
+    public int CountRange(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive)
     {
         var pageNumber = RootPageNumber;
         var index = 0;
         var count = 0;
 
         // find start position
-        if (!query.StartKey.IsEmpty)
+        if (!startKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       query.StartKey,
-                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       startKey,
+                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -294,10 +311,10 @@ class TreeWalker
                     leafNode.GetAt(index, out var key, out _);
 
                     // check end key
-                    if (!query.EndKey.IsEmpty)
+                    if (!endKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, query.EndKey);
-                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, endKey);
+                        if (compared > 0 || (!endKeyExclusive && compared == 0))
                         {
                             return count;
                         }
@@ -324,21 +341,26 @@ class TreeWalker
     }
 
     public async ValueTask<int> CountRangeAsync(
-        Query query,
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
         CancellationToken cancellationToken = default)
     {
+        ValidateRange(startKey, endKey);
+
         var pageNumber = RootPageNumber;
         var index = 0;
         var count = 0;
 
         // find start position
-        if (!query.StartKey.IsEmpty)
+        if (!startKey.IsEmpty)
         {
             PageNumber? nextPage = pageNumber;
             while (!TrySearch(
                        nextPage.Value,
-                       query.StartKey.Span,
-                       query.StartKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       startKey.Span,
+                       startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
                        out index,
                        out nextPage))
             {
@@ -373,10 +395,10 @@ class TreeWalker
                     leafNode.GetAt(index, out var key, out _);
 
                     // check end key
-                    if (!query.EndKey.IsEmpty)
+                    if (!endKey.IsEmpty)
                     {
-                        var compared = KeyEncoding.Compare(key, query.EndKey.Span);
-                        if (compared > 0 || (!query.EndKeyExclusive && compared == 0))
+                        var compared = KeyEncoding.Compare(key, endKey.Span);
+                        if (compared > 0 || (!endKeyExclusive && compared == 0))
                         {
                             return count;
                         }
@@ -587,6 +609,28 @@ class TreeWalker
                 leafNode.GetAt(header.EntryCount - 1, out _, out var valuePageOffset, out var valueLength);
                 var pageSlice = new PageSlice(page, valuePageOffset, valueLength, (ushort)(header.EntryCount - 1));
                 return new SingleValueResult(pageSlice, true);
+            }
+        }
+    }
+
+    void ValidateRange(ReadOnlySpan<byte> startKey, ReadOnlySpan<byte> endKey)
+    {
+        if (!startKey.IsEmpty && !endKey.IsEmpty)
+        {
+            if (KeyEncoding.Compare(startKey, endKey) > 0)
+            {
+                throw new ArgumentException("startKey must be less than or equal to endKey");
+            }
+        }
+    }
+
+    void ValidateRange(ReadOnlyMemory<byte> startKey, ReadOnlyMemory<byte> endKey)
+    {
+        if (!startKey.IsEmpty && !endKey.IsEmpty)
+        {
+            if (KeyEncoding.Compare(startKey, endKey) > 0)
+            {
+                throw new ArgumentException("startKey must be less than or equal to endKey");
             }
         }
     }

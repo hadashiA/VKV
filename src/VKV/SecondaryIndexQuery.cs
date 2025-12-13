@@ -5,6 +5,7 @@ using VKV.BTree;
 
 namespace VKV;
 
+// TODO:
 public readonly struct SecondaryIndexQuery : IKeyValueStore
 {
     public IKeyEncoding KeyEncoding => tree.KeyEncoding;
@@ -18,78 +19,46 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
 
     public SingleValueResult Get(ReadOnlySpan<byte> key)
     {
-        throw new NotImplementedException();
+        return tree.Get(key);
     }
 
     public ValueTask<SingleValueResult> GetAsync(
         ReadOnlyMemory<byte> key,
-        CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    public RangeResult GetRange(in QueryRef query)
-    {
-        throw new NotImplementedException();
-    }
-
-    public ValueTask<RangeResult> GetRangeAsync(Query query, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    public int CountRange(in QueryRef query)
-    {
-        throw new NotImplementedException();
-    }
-
-    public ValueTask<int> CountRangeAsync(Query query, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
+        CancellationToken cancellationToken = default) =>
+        tree.GetAsync(key, cancellationToken);
 
     public RangeResult GetRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending)
-    {
-        throw new NotImplementedException();
-    }
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder) =>
+        tree.GetRange(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder);
 
     public ValueTask<RangeResult> GetRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        SortOrder sortOrder = SortOrder.Ascending,
-        CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder,
+        CancellationToken cancellationToken = default) =>
+        tree.GetRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder, cancellationToken);
 
     public int CountRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false)
-    {
-        throw new NotImplementedException();
-    }
+        bool startKeyExclusive,
+        bool endKeyExclusive) =>
+        tree.CountRange(startKey, endKey, startKeyExclusive, endKeyExclusive);
 
     public ValueTask<int> CountRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive = false,
-        bool endKeyExclusive = false,
-        CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        CancellationToken cancellationToken = default) =>
+        tree.CountRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken);
 
-    public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward)
-    {
-        throw new NotImplementedException();
-    }
+    public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
+        tree.CreateIterator(iteratorDirection);
 }

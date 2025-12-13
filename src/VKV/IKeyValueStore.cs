@@ -12,11 +12,33 @@ public interface IKeyValueStore
     SingleValueResult Get(ReadOnlySpan<byte> key);
     ValueTask<SingleValueResult> GetAsync(ReadOnlyMemory<byte> key, CancellationToken cancellationToken = default);
 
-    RangeResult GetRange(in QueryRef query);
-    ValueTask<RangeResult> GetRangeAsync(Query query, CancellationToken cancellationToken = default);
+    RangeResult GetRange(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder);
 
-    int CountRange(in QueryRef query);
-    ValueTask<int> CountRangeAsync(Query query, CancellationToken cancellationToken = default);
+    ValueTask<RangeResult> GetRangeAsync(
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder,
+        CancellationToken cancellationToken = default);
+
+    int CountRange(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive);
+
+    ValueTask<int> CountRangeAsync(
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        CancellationToken cancellationToken = default);
 
     RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward);
 }
@@ -57,28 +79,32 @@ public static class KeyValueStoreExtensions
 
     public static RangeResult GetRange<TKey>(
         this IKeyValueStore kv,
-        in Query<TKey> query)
+        TKey? startKey,
+        TKey? endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder)
         where TKey : IComparable<TKey>
     {
-        var startKeyBuffer = query.StartKey != null
-            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.StartKey)]
+        var startKeyBuffer = startKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(startKey)]
             : [];
 
-        var endKeyBuffer = query.EndKey != null
-            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.EndKey)]
+        var endKeyBuffer = endKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(endKey)]
             : [];
 
         var startKeyLength = 0;
         var endKeyLength = 0;
 
-        if (query.StartKey is { } s)
+        if (startKey is { } s)
         {
             while (!kv.KeyEncoding.TryEncode(s, startKeyBuffer, out startKeyLength))
             {
                 startKeyBuffer = stackalloc byte[startKeyBuffer.Length * 2];
             }
         }
-        if (query.EndKey is { } e)
+        if (endKey is { } e)
         {
             while (!kv.KeyEncoding.TryEncode(e, endKeyBuffer, out endKeyLength))
             {
@@ -86,74 +112,163 @@ public static class KeyValueStoreExtensions
             }
         }
 
-        return kv.GetRange(new QueryRef
-        {
-            StartKey = startKeyLength > 0 ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
-            EndKey = endKeyLength > 0 ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
-            StartKeyExclusive = query.StartKeyExclusive,
-            EndKeyExclusive = query.EndKeyExclusive,
-            SortOrder = query.SortOrder,
-        });
+        return kv.GetRange(
+            startKeyLength > 0 ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
+            endKeyLength > 0 ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
+            startKeyExclusive,
+            endKeyExclusive,
+            sortOrder);
     }
 
-    public static ValueTask<RangeResult> GetRangeAsync<TKey>(
+    public static async ValueTask<RangeResult> GetRangeAsync<TKey>(
         this IKeyValueStore kv,
-        Query<TKey> query,
+        TKey? startKey,
+        TKey? endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        SortOrder sortOrder,
         CancellationToken cancellationToken = default)
         where TKey : IComparable<TKey>
     {
-        using var encodedQuery = query.ToEncodedQuery(kv.KeyEncoding);
-        return kv.GetRangeAsync(encodedQuery.Query, cancellationToken);
+        byte[]? startKeyBuffer = null;
+        byte[]? endKeyBuffer = null;
+
+        var startKeyLength = 0;
+        var endKeyLength = 0;
+
+        if (startKey != null)
+        {
+            var initialBufferSize = kv.KeyEncoding.GetMaxEncodedByteCount(startKey);
+            startKeyBuffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+            while (!kv.KeyEncoding.TryEncode(startKey, startKeyBuffer, out startKeyLength))
+            {
+                var newLength = startKeyBuffer.Length * 2;
+                ArrayPool<byte>.Shared.Return(startKeyBuffer);
+                startKeyBuffer = ArrayPool<byte>.Shared.Rent(newLength);
+            }
+        }
+        if (endKey != null)
+        {
+            var initialBufferSize = kv.KeyEncoding.GetMaxEncodedByteCount(endKey);
+            endKeyBuffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+            while (!kv.KeyEncoding.TryEncode(endKey, endKeyBuffer, out endKeyLength))
+            {
+                var newLength = startKeyBuffer.Length * 2;
+                ArrayPool<byte>.Shared.Return(endKeyBuffer);
+                endKeyBuffer = ArrayPool<byte>.Shared.Rent(newLength);
+            }
+        }
+
+        try
+        {
+            return await kv.GetRangeAsync(
+                startKeyBuffer != null ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
+                endKeyBuffer != null ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
+                startKeyExclusive,
+                endKeyExclusive,
+                sortOrder,
+                cancellationToken);
+        }
+        finally
+        {
+            if (startKeyBuffer != null) ArrayPool<byte>.Shared.Return(startKeyBuffer);
+            if (endKeyBuffer != null) ArrayPool<byte>.Shared.Return(endKeyBuffer);
+        }
     }
 
     public static int CountRange<TKey>(
         this IKeyValueStore kv,
-        in Query<TKey> query)
+        TKey? startKey,
+        TKey? endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive)
         where TKey : IComparable<TKey>
     {
-        var startKeyBuffer = query.StartKey != null
-            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.StartKey)]
+        var startKeyBuffer = startKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(startKey)]
             : [];
 
-        var endKeyBuffer = query.EndKey != null
-            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(query.EndKey)]
+        var endKeyBuffer = endKey != null
+            ? stackalloc byte[kv.KeyEncoding.GetMaxEncodedByteCount(endKey)]
             : [];
 
         var startKeyLength = 0;
         var endKeyLength = 0;
 
-        if (query.StartKey is { } s)
+        if (startKey != null)
         {
-            while (!kv.KeyEncoding.TryEncode(s, startKeyBuffer, out startKeyLength))
+            while (!kv.KeyEncoding.TryEncode(startKey, startKeyBuffer, out startKeyLength))
             {
                 startKeyBuffer = stackalloc byte[startKeyBuffer.Length * 2];
             }
         }
-        if (query.EndKey is { } e)
+        if (endKey != null)
         {
-            while (!kv.KeyEncoding.TryEncode(e, endKeyBuffer, out endKeyLength))
+            while (!kv.KeyEncoding.TryEncode(endKey, endKeyBuffer, out endKeyLength))
             {
                 endKeyBuffer = stackalloc byte[endKeyBuffer.Length * 2];
             }
         }
 
-        return kv.CountRange(new QueryRef
-        {
-            StartKey = startKeyLength > 0 ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
-            EndKey = endKeyLength > 0 ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
-            StartKeyExclusive = query.StartKeyExclusive,
-            EndKeyExclusive = query.EndKeyExclusive,
-            SortOrder = query.SortOrder,
-        });
+        return kv.CountRange(
+
+            startKeyLength > 0 ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
+            endKeyLength > 0 ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
+            startKeyExclusive,
+            endKeyExclusive);
     }
 
-    public static ValueTask<int> CountRangeAsync<TKey>(
+    public static async ValueTask<int> CountRangeAsync<TKey>(
         this IKeyValueStore kv,
-        Query<TKey> query,
+        TKey? startKey,
+        TKey? endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
         CancellationToken cancellationToken = default)
         where TKey : IComparable<TKey>
     {
-        using var encodedQuery = query.ToEncodedQuery(kv.KeyEncoding);
-        return kv.CountRangeAsync(encodedQuery.Query, cancellationToken);
+        byte[]? startKeyBuffer = null;
+        byte[]? endKeyBuffer = null;
+
+        var startKeyLength = 0;
+        var endKeyLength = 0;
+
+        if (startKey != null)
+        {
+            var initialBufferSize = kv.KeyEncoding.GetMaxEncodedByteCount(startKey);
+            startKeyBuffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+            while (!kv.KeyEncoding.TryEncode(startKey, startKeyBuffer, out startKeyLength))
+            {
+                var newLength = startKeyBuffer.Length * 2;
+                ArrayPool<byte>.Shared.Return(startKeyBuffer);
+                startKeyBuffer = ArrayPool<byte>.Shared.Rent(newLength);
+            }
+        }
+        if (endKey != null)
+        {
+            var initialBufferSize = kv.KeyEncoding.GetMaxEncodedByteCount(endKey);
+            endKeyBuffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
+            while (!kv.KeyEncoding.TryEncode(endKey, endKeyBuffer, out endKeyLength))
+            {
+                var newLength = startKeyBuffer.Length * 2;
+                ArrayPool<byte>.Shared.Return(endKeyBuffer);
+                endKeyBuffer = ArrayPool<byte>.Shared.Rent(newLength);
+            }
+        }
+
+        try
+        {
+            return await kv.CountRangeAsync(
+                startKeyBuffer != null ? startKeyBuffer[..startKeyLength] : KeyRange.Unbound,
+                endKeyBuffer != null ? endKeyBuffer[..endKeyLength] : KeyRange.Unbound,
+                startKeyExclusive,
+                endKeyExclusive,
+                cancellationToken);
+        }
+        finally
+        {
+            if (startKeyBuffer != null) ArrayPool<byte>.Shared.Return(startKeyBuffer);
+            if (endKeyBuffer != null) ArrayPool<byte>.Shared.Return(endKeyBuffer);
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -22,6 +22,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\VKV.Compression\VKV.Compression.csproj" />
+      <ProjectReference Include="..\..\src\VKV.MessagePack\VKV.MessagePack.csproj" />
       <ProjectReference Include="..\..\src\VKV\VKV.csproj" />
     </ItemGroup>
 

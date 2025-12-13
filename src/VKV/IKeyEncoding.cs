@@ -71,11 +71,6 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
 
     public string Id => "i64";
 
-    public void ThrowIfNotSupportedType(Type type)
-    {
-        throw new NotImplementedException();
-    }
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
     {
