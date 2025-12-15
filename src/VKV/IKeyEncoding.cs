@@ -1,11 +1,9 @@
 using System;
-using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using VKV.Internal;
 
 namespace VKV;
 
@@ -47,21 +45,6 @@ public static class KeyEncoding
         {
             throw new ArgumentException($"The encoding {customEncoding.Id} already exists.");
         }
-    }
-
-    internal static PooledBuffer<byte> EncodeMemory<TKey>(this IKeyEncoding keyEncoding, TKey key)
-        where TKey : IComparable<TKey>
-    {
-        var initialBufferSize = keyEncoding.GetMaxEncodedByteCount(key);
-        var buffer = ArrayPool<byte>.Shared.Rent(initialBufferSize);
-        int bytesWritten;
-        while (!keyEncoding.TryEncode(key, buffer, out bytesWritten))
-        {
-            var newLength = buffer.Length * 2;
-            ArrayPool<byte>.Shared.Return(buffer);
-            buffer = ArrayPool<byte>.Shared.Rent(newLength);
-        }
-        return new PooledBuffer<byte>(buffer, 0, bytesWritten);
     }
 }
 

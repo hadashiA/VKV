@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.BTree;
@@ -43,7 +44,20 @@ public sealed class ReadOnlyTable : IKeyValueStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SingleValueResult Get(ReadOnlySpan<byte> key) => primaryKeyTree.Get(key);
 
-    // optimization
+    // this overload is optimize purpose
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SingleValueResult Get(long key)
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(long)];
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(buffer), key);
+        return primaryKeyTree.Get(buffer);
+    }
+
+    // this overload is optimize purpose
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SingleValueResult Get(int key) => Get((long)key);
+
+    // this overload is optimize purpose
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SingleValueResult Get<TKey>(TKey key)
         where TKey : IComparable<TKey>

@@ -5,10 +5,12 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\VKV.Compression\VKV.Compression.csproj" />
+      <ProjectReference Include="..\..\src\VKV.MessagePack\VKV.MessagePack.csproj" />
       <ProjectReference Include="..\..\src\VKV\VKV.csproj" />
     </ItemGroup>
 

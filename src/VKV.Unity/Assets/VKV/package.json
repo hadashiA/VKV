@@ -1,7 +1,7 @@
 {
   "name": "jp.hadashikick.vkv.unity",
   "displayName": "VKV.Unity",
-  "version": "1.0.0",
+  "version": "0.1.0-preview",
   "unity": "2022.2",
   "description": "Ultra low memory-efficient optimized, read-only B+Tree queryable key/value store.",
   "keywords": ["db", "key/value store", "storage"],

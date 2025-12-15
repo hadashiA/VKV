@@ -2,10 +2,11 @@
 using System.Text;
 // using CsSqlite;
 using VKV;
+using VKV.MessagePack;
 
 var directory = Directory.CreateTempSubdirectory("vkv_benchmarks");
 // var sqlitePath = Path.Combine(directory.FullName, "bench.sqlite");
-var drydbPath = Path.Combine(directory.FullName, "bench.vkv");
+var filePath = Path.Combine(directory.FullName, "bench.vkv");
 
 // Setup DryDB
 using (var builder = new DatabaseBuilder
@@ -13,18 +14,19 @@ using (var builder = new DatabaseBuilder
            PageSize = 4096
        })
 {
-    var tableBuilder = builder.CreateTable("items", KeyEncoding.Int64LittleEndian);
+    var tableBuilder = builder
+        .CreateTable("items", KeyEncoding.Ascii);
     for (var i = 0; i < 1000; i++)
     {
-        tableBuilder.Append(i, Encoding.UTF8.GetBytes($"{i:D10}"));
+        tableBuilder.Append($"{i:D5}", Encoding.UTF8.GetBytes($"{i:D10}"));
     }
-    await builder.BuildToFileAsync(drydbPath);
+    await builder.BuildToFileAsync(filePath);
     // var memoryStream = new MemoryStream();
     // await builder.SaveToStreamAsync(memoryStream);
-    Console.WriteLine(drydbPath);
+    Console.WriteLine(filePath);
 }
 
-using (var database = await ReadOnlyDatabase.OpenFileAsync(drydbPath))
+using (var database = await ReadOnlyDatabase.OpenFileAsync(filePath))
 {
     var table = database.GetTable("items");
 
