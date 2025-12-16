@@ -5,8 +5,8 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <!-- TODO: -->
-        <IsPackable>false</IsPackable>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>vkv</ToolCommandName>
     </PropertyGroup>
 
     <ItemGroup>
