@@ -32,7 +32,7 @@ class KeyValueList(
             ArrayPool<byte>.Shared.Return(buffer);
             buffer = ArrayPool<byte>.Shared.Rent(buffer.Length * 2);
         }
-        Add((ReadOnlyMemory<byte>)buffer.AsMemory(0, bytesWritten), value);
+        Add(buffer.AsMemory(0, bytesWritten), value);
     }
 
     public void Add(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value)

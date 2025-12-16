@@ -1,8 +1,6 @@
-﻿using System.Buffers;
-using System.Text;
+﻿using System.Text;
 // using CsSqlite;
 using VKV;
-using VKV.MessagePack;
 
 var directory = Directory.CreateTempSubdirectory("vkv_benchmarks");
 // var sqlitePath = Path.Combine(directory.FullName, "bench.sqlite");
@@ -18,7 +16,7 @@ using (var builder = new DatabaseBuilder
         .CreateTable("items", KeyEncoding.Ascii);
     for (var i = 0; i < 1000; i++)
     {
-        tableBuilder.Append($"{i:D5}", Encoding.UTF8.GetBytes($"{i:D10}"));
+        tableBuilder.Append($"key{i:D4}", Encoding.UTF8.GetBytes($"value{i:D4}"));
     }
     await builder.BuildToFileAsync(filePath);
     // var memoryStream = new MemoryStream();

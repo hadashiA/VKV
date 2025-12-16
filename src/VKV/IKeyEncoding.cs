@@ -18,6 +18,8 @@ public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
 
     bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
         where TKey : IComparable<TKey>;
+
+    bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten);
 }
 
 public static class KeyEncoding
@@ -99,6 +101,17 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
         return true;
     }
 
+    public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
+    {
+        if (long.TryParse(formattedString, out var longValue))
+        {
+            Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), longValue);
+            bytesWritten = sizeof(long);
+        }
+        bytesWritten = default;
+        return false;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Compare(ReadOnlyMemory<byte> a, ReadOnlyMemory<byte> b)
     {
@@ -143,8 +156,34 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
 #if NET8_0_OR_GREATER
         return Encoding.ASCII.TryGetBytes(stringKey, destination, out bytesWritten);
 #else
-        bytesWritten = Encoding.ASCII.GetBytes(stringKey, destination);
-        return true;
+        try
+        {
+            bytesWritten = Encoding.ASCII.GetBytes(stringKey, destination);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+#endif
+    }
+
+    public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
+    {
+#if NET8_0_OR_GREATER
+        return Encoding.ASCII.TryGetBytes(formattedString, destination, out bytesWritten);
+#else
+        try
+        {
+            bytesWritten = Encoding.ASCII.GetBytes(formattedString, destination);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            bytesWritten = 0;
+            return false;
+        }
 #endif
     }
 
@@ -160,14 +199,6 @@ public sealed class Utf8OrdinalEncoding : IKeyEncoding
     public static readonly Utf8OrdinalEncoding Instance = new();
 
     public string Id => "u8";
-
-    public void ThrowIfNotSupportedType(Type type)
-    {
-        if (type != typeof(string))
-        {
-            throw new KeyEncodingMismatchException($"Cannot convert as string from {type}");
-        }
-    }
 
     public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
     {
@@ -236,8 +267,34 @@ public sealed class Utf8OrdinalEncoding : IKeyEncoding
 #if NET8_0_OR_GREATER
         return Encoding.UTF8.TryGetBytes(stringKey, destination, out bytesWritten);
 #else
-        bytesWritten = Encoding.UTF8.GetBytes(stringKey, destination);
-        return true;
+        try
+        {
+            bytesWritten = Encoding.UTF8.GetBytes(stringKey, destination);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+#endif
+    }
+
+    public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
+    {
+#if NET8_0_OR_GREATER
+        return Encoding.UTF8.TryGetBytes(formattedString, destination, out bytesWritten);
+#else
+        try
+        {
+            bytesWritten = Encoding.UTF8.GetBytes(formattedString, destination);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            bytesWritten = 0;
+            return false;
+        }
 #endif
     }
 
