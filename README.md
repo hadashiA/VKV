@@ -146,7 +146,7 @@ Fetching all values beforehand consumes a lot of memory.
 
 If you want to process each row sequentially in a table, you can further suppress memory consumption by using RangeIterator.
 
-``cs
+```cs
 using var iterator = table.CreateIterator();
 
 // Get current value..
@@ -213,7 +213,6 @@ var databaseBuilder = new DatabaseBuilder();
 
 var tableBuilder = builder.CreateTable("items", KeyEncoding.Ascii)
     .AsMessagePackSerializable<Person>();
-
 
 // Add MessagePack serialized values...
 var tableBuilder.Append("key01", new Person { Name = "Bob", Age = 22 });
