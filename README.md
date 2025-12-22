@@ -91,7 +91,9 @@ await builder.BuildToFileAsync("/path/to/bin.vkv");
 // Open DB
 var database = await ReadOnlyDatabase.OpenAsync("/pth/to/bin.vkv", new DatabaseLoadOptions
 {
-    PageCacheCapacity = 8, // Maximum number of pages to keep in memory
+    // Maximum number of pages to keep in memory
+    // Basically, page cache x capacity serves as a rough estimate of memory usage.
+    PageCacheCapacity = 32, 
 });
 
 var table = database.GetTable("items");
@@ -131,12 +133,10 @@ using var range = table.GetRange(KeyRange.UnBound, "key999", endKeyExclusive: tr
 var count = table.CountRange("key1", "key3");
     
 // async
-using var value1 = await table.GetAsync("key1"u8);
-using var range1 = await table.GetRangeAsync("key1"u8, "key3"u8);
+using var value1 = await table.GetAsync("key1");
+using var range1 = await table.GetRangeAsync("key1", "key3");
 var count = await table.CountRangeAsync();
 
-// secondary index
-using var result = table.IndexBy("label").Get("secondary_key"u8);
 ```
 
 ### Range Iterator
