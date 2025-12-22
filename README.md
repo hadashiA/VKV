@@ -3,7 +3,7 @@
 > [!WARNING]
 > This project is work in progress 
 
-VKV is a red-only embedded B+Tree based key/value database, implemented pure C#.
+VKV is a read-only embedded B+Tree based key/value database, implemented pure C#.
 
 ```
 | Method             | Mean        | Error     | StdDev    |
