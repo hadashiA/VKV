@@ -79,7 +79,7 @@ public sealed class PageCache : IDisposable
         this.capacity = capacity;
         this.filters = filters;
 
-        sTargetSize = Math.Max(1, (int)(capacity * smallFraction));
+        sTargetSize = Math.Max(2, (int)(capacity * smallFraction));
         mTargetSize = capacity - sTargetSize;
 
         map = new ConcurrentDictionary<PageNumber, Entry>(
@@ -152,7 +152,7 @@ public sealed class PageCache : IDisposable
         {
             PageNumber = pageNumber,
             Buffer = buffer,
-            Frequency = 0,
+            Frequency = 1,
             Tag = QueueTag.None,
             RefCount = 1
         };
