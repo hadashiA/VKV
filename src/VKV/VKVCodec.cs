@@ -181,7 +181,7 @@ static class VKVCodec
         try
         {
             bytesRead = await stream.ReadAtLeastAsync(buffer, sizeof(ushort), cancellationToken: cancellationToken);
-            indexCount = BinaryPrimitives.ReadUInt16LittleEndian(buffer);
+            indexCount = BinaryPrimitives.ReadUInt16LittleEndian(buffer.AsSpan(0, sizeof(ushort)));
         }
         finally
         {

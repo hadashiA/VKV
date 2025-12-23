@@ -121,7 +121,7 @@ public class TableBuilder
         // build secondary index length
         Span<byte> indexCountBuffer = stackalloc byte[sizeof(ushort)];
         BinaryPrimitives.WriteUInt16LittleEndian(indexCountBuffer, (ushort)SecondaryIndexOptions.Count);
-        stream.Write(indexCountBuffer[..sizeof(ushort)]);
+        stream.Write(indexCountBuffer);
 
         // build secondary index descriptors
         foreach (var indexOptions in SecondaryIndexOptions)
@@ -135,9 +135,11 @@ public class TableBuilder
 
         // write primary tree root position
         Span<byte> positionBuffer = stackalloc byte[sizeof(long)];
-        stream.Seek(descriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
         BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, primaryKeyResult.RootPageNumber.Value);
+        var currentPosition = stream.Position;
+        stream.Seek(descriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
         stream.Write(positionBuffer);
+        stream.Seek(currentPosition, SeekOrigin.Begin);
 
         // write secondary tree root positions
         for (var i = 0; i < SecondaryIndexOptions.Count; i++)
@@ -158,9 +160,12 @@ public class TableBuilder
 
             // write secondary tree root position
             Span<byte> positionBuffer2 = stackalloc byte[sizeof(long)];
-            stream.Seek(descriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
             BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, secondaryKeyResult.RootPageNumber.Value);
+
+            var currentPosition2 = stream.Position;
+            stream.Seek(descriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
             stream.Write(positionBuffer2);
+            stream.Seek(currentPosition2, SeekOrigin.Begin);
         }
     }
 

@@ -62,9 +62,9 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
     public RangeResult GetRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder)
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending)
     {
         using var pageRefs = tree.GetRange(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder);
         if (pageRefs.Count <= 0)
@@ -73,7 +73,7 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
         }
 
         var result = RangeResult.Rent();
-        foreach (var x in result)
+        foreach (var x in pageRefs)
         {
             var pageRef = PageRef.Parse(x.Span);
             IPageEntry page;
@@ -102,7 +102,7 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
         }
 
         var result = RangeResult.Rent();
-        foreach (var x in result)
+        foreach (var x in pageRefs)
         {
             var pageRef = PageRef.Parse(x.Span);
             IPageEntry page;
@@ -118,15 +118,15 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
     public int CountRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive) =>
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false) =>
         tree.CountRange(startKey, endKey, startKeyExclusive, endKeyExclusive);
 
     public ValueTask<int> CountRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
         CancellationToken cancellationToken = default) =>
         tree.CountRangeAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken);
 }
