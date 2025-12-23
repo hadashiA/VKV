@@ -18,6 +18,8 @@ using static System.Runtime.CompilerServices.MemoryMarshalEx;
 
 namespace VKV;
 
+public delegate ReadOnlyMemory<byte> SecondaryIndexFactory(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value);
+
 public abstract class IndexOptions(string name, bool isUnique)
 {
     public string Name => name;
@@ -35,7 +37,7 @@ public class PrimaryKeyIndexOptions(string name) : IndexOptions(name, true)
 public class SecondaryIndexOptions(string name, bool isUnique) : IndexOptions(name, isUnique)
 {
     public override ValueKind ValueKind => ValueKind.PageRef;
-    public required Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> ValueToIndexFactory;
+    public required SecondaryIndexFactory IndexFactory;
 }
 
 public class FilterOptions
@@ -78,12 +80,12 @@ public class TableBuilder
         string indexName,
         bool isUnique,
         IKeyEncoding keyEncoding,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> valueToIndexFactory)
+        SecondaryIndexFactory indexFactory)
     {
         secondaryIndexOptions.Add(new SecondaryIndexOptions(indexName, isUnique)
         {
             KeyEncoding = keyEncoding,
-            ValueToIndexFactory = valueToIndexFactory,
+            IndexFactory = indexFactory,
         });
     }
 
@@ -147,9 +149,9 @@ public class TableBuilder
             var indexOptions = SecondaryIndexOptions[i];
             var secondaryKeyValues = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
             var primaryKeyIndex = 0;
-            foreach (var (_, value) in keyValues)
+            foreach (var (primaryKey, value) in keyValues)
             {
-                var secondaryKey = indexOptions.ValueToIndexFactory.Invoke(value);
+                var secondaryKey = indexOptions.IndexFactory.Invoke(primaryKey, value);
                 var valuePointer = primaryKeyResult.WroteValueRefs[primaryKeyIndex];
                 secondaryKeyValues.Add(secondaryKey, valuePointer.Encode());
                 primaryKeyIndex++;

@@ -14,10 +14,10 @@ public class SecondaryIndexQueryTest
             databaseConfigure: builder => builder.PageSize = 128,
             tableConfigure: builder =>
             {
-                builder.AddSecondaryIndex("category", true, KeyEncoding.Ascii, value =>
+                builder.AddSecondaryIndex("category", true, KeyEncoding.Ascii, (key, value) =>
                 {
-                    var valueStr = Encoding.ASCII.GetString(value.Span);
-                    return Encoding.ASCII.GetBytes($"category:{valueStr}");
+                    var keyStr = Encoding.ASCII.GetString(key.Span);
+                    return Encoding.ASCII.GetBytes($"category:{keyStr}");
                 });
 
                 for (var i = 0; i < 1000; i++)
@@ -28,8 +28,8 @@ public class SecondaryIndexQueryTest
                 }
             });
 
-        var seconaryIndex = table.WithIndex("category");
-        var result = seconaryIndex.Get("category:value00010");
+        var query = table.WithIndex("category");
+        var result = query.Get("category:key00010");
         Assert.That(result.HasValue, Is.True);
         Assert.That(Encoding.ASCII.GetString(result.Value.Span), Is.EqualTo("value00010"));
     }
@@ -42,10 +42,10 @@ public class SecondaryIndexQueryTest
             databaseConfigure: builder => builder.PageSize = 128,
             tableConfigure: builder =>
             {
-                builder.AddSecondaryIndex("category", true, KeyEncoding.Ascii, value =>
+                builder.AddSecondaryIndex("category", true, KeyEncoding.Ascii, (key, value) =>
                 {
-                    var valueStr = Encoding.ASCII.GetString(value.Span);
-                    return Encoding.ASCII.GetBytes($"category:{valueStr}");
+                    var keyStr = Encoding.ASCII.GetString(key.Span);
+                    return Encoding.ASCII.GetBytes($"category:{keyStr}");
                 });
 
                 for (var i = 0; i < 1000; i++)
@@ -71,10 +71,10 @@ public class SecondaryIndexQueryTest
             databaseConfigure: builder => builder.PageSize = 128,
             tableConfigure: builder =>
             {
-                builder.AddSecondaryIndex("category", true, KeyEncoding.Ascii, value =>
+                builder.AddSecondaryIndex("category", true, KeyEncoding.Ascii, (key, value) =>
                 {
-                    var valueStr = Encoding.ASCII.GetString(value.Span);
-                    return Encoding.ASCII.GetBytes($"category:{valueStr}");
+                    var keyStr = Encoding.ASCII.GetString(key.Span);
+                    return Encoding.ASCII.GetBytes($"category:{keyStr}");
                 });
 
                 for (var i = 0; i < 1000; i++)
@@ -86,10 +86,9 @@ public class SecondaryIndexQueryTest
             });
 
         var query = table.WithIndex("category");
-        var x= query.Get("category:value00020"u8);
         var result = query.GetRange(
-            "category:value00010"u8,
-            "category:value00020"u8);
+            "category:key00010"u8,
+            "category:key00020"u8);
         Assert.That(result.Count, Is.EqualTo(11));
     }
 }
