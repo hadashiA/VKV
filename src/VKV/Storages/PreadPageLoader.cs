@@ -40,10 +40,10 @@ public sealed class PreadPageLoader(SafeFileHandle handle) : IPageLoader
         var pageLength = Unsafe.ReadUnaligned<int>(ref GetArrayDataReference(lengthBuffer));
 
         var bytesRead = 0;
-        var destination = MemoryPool<byte>.Shared.Rent(pageLength);
+        var destination = new byte[pageLength];
         while (bytesRead < pageLength)
         {
-            var buffer = destination.Memory[bytesRead..(pageLength - bytesRead)];
+            var buffer = destination.AsMemory(bytesRead, pageLength - bytesRead);
             n = await RandomAccess.ReadAsync(
                 handle,
                 buffer,
@@ -58,18 +58,11 @@ public sealed class PreadPageLoader(SafeFileHandle handle) : IPageLoader
 
         if (filters is { Length: > 0 })
         {
-            try
-            {
-                return ApplyFilter(
-                    destination.Memory.Span[..pageLength],
-                    filters);
-            }
-            finally
-            {
-                destination.Dispose();
-            }
+            return ApplyFilter(
+                destination.AsSpan(0, pageLength),
+                filters);
         }
-        return destination;
+        return new ArrayBuffer<byte>(destination);
     }
 
     public IMemoryOwner<byte> ReadPage(PageNumber pageNumber, IPageFilter[]? filters = null)
@@ -79,10 +72,10 @@ public sealed class PreadPageLoader(SafeFileHandle handle) : IPageLoader
         var pageLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
 
         var bytesRead = 0;
-        var destination = MemoryPool<byte>.Shared.Rent(pageLength);
+        var destination = new byte[pageLength];
         while (bytesRead < pageLength)
         {
-            var buffer = destination.Memory[bytesRead..(pageLength - bytesRead)];
+            var buffer = destination.AsMemory(bytesRead, pageLength - bytesRead);
             var n = RandomAccess.Read(
                 handle,
                 buffer.Span,
@@ -96,18 +89,11 @@ public sealed class PreadPageLoader(SafeFileHandle handle) : IPageLoader
 
         if (filters is { Length: > 0 })
         {
-            try
-            {
-                return ApplyFilter(
-                    destination.Memory.Span[..pageLength],
-                    filters);
-            }
-            finally
-            {
-                destination.Dispose();
-            }
+            return ApplyFilter(
+                destination.AsSpan(0, pageLength),
+                filters);
         }
-        return destination;
+        return new ArrayBuffer<byte>(destination);
     }
 
     static IMemoryOwner<byte> ApplyFilter(ReadOnlySpan<byte> source, IPageFilter[] filters)
