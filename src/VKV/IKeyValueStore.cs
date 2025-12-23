@@ -39,8 +39,6 @@ public interface IKeyValueStore
         bool startKeyExclusive,
         bool endKeyExclusive,
         CancellationToken cancellationToken = default);
-
-    RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward);
 }
 
 public static class KeyValueStoreExtensions

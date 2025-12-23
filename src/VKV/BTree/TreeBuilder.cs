@@ -37,20 +37,30 @@ sealed class NodeEntry(int pageSize)
     }
 }
 
+sealed class TreeBuildResult
+{
+    public PageNumber RootPageNumber { get; init; }
+    public List<PageRef> WroteValueRefs { get; init; }
+}
+
 static class TreeBuilder
 {
     static readonly int PageHeaderSize = Unsafe.SizeOf<PageHeader>() + Unsafe.SizeOf<NodeHeader>();
     static readonly int RightSiblingPositionPageOffset = PageHeaderSize - sizeof(long);
 
-    public static async ValueTask<PageNumber> BuildToAsync(
+    public static async ValueTask<TreeBuildResult> BuildToAsync(
         Stream outStream,
         int pageSize,
         KeyValueList keyValues,
         IReadOnlyList<IPageFilter>? pageFilters = null,
         CancellationToken cancellationToken = default)
     {
-        if (pageSize < PageHeaderSize + 16)
+        if (pageSize < PageHeaderSize + 128)
+        {
             throw new ArgumentException("pageSize too small");
+        }
+
+        var wroteValuePointers = new List<PageRef>(keyValues.Count);
 
         var nodes = new List<NodeEntry> { new(pageSize) };
         nodes[0].Reset();
@@ -67,7 +77,13 @@ static class TreeBuilder
                         leaf.KeyValueBufferOffset + key.Length + value.Length;
             if (needs > pageSize)
             {
-                await RotatePageAsync(outStream, nodes, 0, true, pageFilters, cancellationToken).ConfigureAwait(false);
+                await RotatePageAsync(outStream
+                    , nodes,
+                    0,
+                    true,
+                    wroteValuePointers,
+                    pageFilters,
+                    cancellationToken).ConfigureAwait(false);
                 if (nodes[0].EntryCount <= 0)
                 {
                     nodes[0].FirstKey = key;
@@ -100,20 +116,25 @@ static class TreeBuilder
             {
                 if (nodes[level].EntryCount > 0)
                 {
-                    await RotatePageAsync(outStream, nodes, level, true, pageFilters, cancellationToken).ConfigureAwait(false);
+                    await RotatePageAsync(outStream, nodes, level, true, wroteValuePointers, pageFilters, cancellationToken).ConfigureAwait(false);
                 }
             }
 
             // write top-level
             if (nodes[^1].EntryCount > 0)
             {
-                await RotatePageAsync(outStream, nodes, nodes.Count - 1, false, pageFilters, cancellationToken).ConfigureAwait(false);
+                await RotatePageAsync(outStream, nodes, nodes.Count - 1, false, wroteValuePointers, pageFilters, cancellationToken).ConfigureAwait(false);
             }
 
             if (nodes[^1].EntryCount <= 0) break;
         }
 
-        return nodes[^1].PrevNodeStartPageNumber; // latest root
+        var rootPageNumber = nodes[^1].PrevNodeStartPageNumber; // latest root
+        return new TreeBuildResult
+        {
+            RootPageNumber = rootPageNumber,
+            WroteValueRefs = wroteValuePointers
+        };
     }
 
     static async ValueTask RotatePageAsync(
@@ -121,6 +142,7 @@ static class TreeBuilder
         List<NodeEntry> nodeEntries,
         int level,
         bool promote,
+        List<PageRef> wroteValueRefs,
         IReadOnlyList<IPageFilter>? pageFilters = null,
         CancellationToken cancellationToken = default)
     {
@@ -136,7 +158,7 @@ static class TreeBuilder
             RightSiblingPageNumber = PageNumber.Empty
         };
 
-        await FlushPageAsync(outStream, nodeHeader, currentNode, pageFilters, cancellationToken)
+        await FlushPageAsync(outStream, nodeHeader, currentNode, wroteValueRefs, pageFilters, cancellationToken)
             .ConfigureAwait(false);
 
         // Patch RightSiblingPosition
@@ -184,7 +206,7 @@ static class TreeBuilder
                     parent.KeyValueBufferOffset + sepKey.Length + sizeof(long);
         if (needs > parent.PageSize)
         {
-            await RotatePageAsync(outStream, nodeEntries, parentLevel, true, pageFilters, cancellationToken)
+            await RotatePageAsync(outStream, nodeEntries, parentLevel, true, wroteValueRefs, pageFilters, cancellationToken)
                 .ConfigureAwait(false);
             if (parent.EntryCount == 0) parent.FirstKey = sepKey; // first key of new page
         }
@@ -212,9 +234,12 @@ static class TreeBuilder
         Stream outStream,
         NodeHeader nodeHeader,
         NodeEntry node,
+        List<PageRef> wroteValueRefs,
         IReadOnlyList<IPageFilter>? filters,
         CancellationToken cancellationToken = default)
     {
+        var currentPageNumber = new PageNumber(outStream.Position);
+
         var pageLength = PageHeaderSize +
                          node.EntryCount * (nodeHeader.Kind == NodeKind.Leaf
                              ? sizeof(int) + sizeof(ushort) * 2
@@ -244,6 +269,11 @@ static class TreeBuilder
 
         foreach (var (keyLength, valueLength) in node.KeyValueSizes)
         {
+            if (nodeHeader.Kind == NodeKind.Leaf)
+            {
+                wroteValueRefs.Add(new PageRef(currentPageNumber, payloadOffset + keyLength, valueLength));
+            }
+
             Unsafe.WriteUnaligned(ref ptr, payloadOffset);
             ptr = ref Unsafe.Add(ref ptr, sizeof(int));
 

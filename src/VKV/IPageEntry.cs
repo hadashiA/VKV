@@ -4,12 +4,11 @@ using System.Runtime.InteropServices;
 
 namespace VKV;
 
-public readonly struct PageSlice(IPageEntry entry, int start, ushort length, ushort index) : IDisposable
+public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
 {
     public IPageEntry Page => entry;
     public int Start => start;
-    public ushort Length => length;
-    public ushort Index => index;
+    public int Length => length;
 
     public ReadOnlySpan<byte> Span
     {

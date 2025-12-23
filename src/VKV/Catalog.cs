@@ -6,7 +6,7 @@ public enum ValueKind : byte
 {
     RawData,
     PrimaryKey,
-    BlockRef,
+    PageRef,
 }
 
 public class IndexDescriptor

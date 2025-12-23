@@ -4,7 +4,6 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,7 +33,7 @@ public class PrimaryKeyIndexOptions(string name) : IndexOptions(name, true)
 
 public class SecondaryIndexOptions(string name, bool isUnique) : IndexOptions(name, isUnique)
 {
-    public override ValueKind ValueKind => ValueKind.PrimaryKey;
+    public override ValueKind ValueKind => ValueKind.PageRef;
     public required Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> ValueToIndexFactory;
 }
 
@@ -131,32 +130,35 @@ public class TableBuilder
         }
 
         // write primary tree
-        var rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
+        var primaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
 
         // write primary tree root position
         Span<byte> positionBuffer = stackalloc byte[sizeof(long)];
         stream.Seek(descriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
-        BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, rootPosition.Value);
+        BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, primaryKeyResult.RootPageNumber.Value);
         stream.Write(positionBuffer);
 
         // write secondary tree root positions
         for (var i = 0; i < SecondaryIndexOptions.Count; i++)
         {
             var indexOptions = SecondaryIndexOptions[i];
-            var indexToPrimaryKeyPairs = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
-            foreach (var (k, v) in keyValues)
+            var secondaryKeyValues = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
+            var primaryKeyIndex = 0;
+            foreach (var (_, value) in keyValues)
             {
-                var index = indexOptions.ValueToIndexFactory.Invoke(v);
-                indexToPrimaryKeyPairs.Add(index, k);
+                var secondaryKey = indexOptions.ValueToIndexFactory.Invoke(value);
+                var valuePointer = primaryKeyResult.WroteValueRefs[primaryKeyIndex];
+                secondaryKeyValues.Add(secondaryKey, valuePointer.Encode());
+                primaryKeyIndex++;
             }
 
-            // write primary tree
-            rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, indexToPrimaryKeyPairs, pageFilters, cancellationToken);
+            // write secondary key tree
+            var secondaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, secondaryKeyValues, pageFilters, cancellationToken);
 
-            // write primary tree root position
+            // write secondary tree root position
             Span<byte> positionBuffer2 = stackalloc byte[sizeof(long)];
             stream.Seek(descriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
-            BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, rootPosition.Value);
+            BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, secondaryKeyResult.RootPageNumber.Value);
             stream.Write(positionBuffer2);
         }
     }
@@ -260,7 +262,7 @@ public class DatabaseBuilder : IDisposable
         header.TableCount = (ushort)tableBuilders.Count;
 
         Span<byte> headerBytes = stackalloc byte[Unsafe.SizeOf<Header>()];
-        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(headerBytes), header);
+        Unsafe.WriteUnaligned(ref GetReference(headerBytes), header);
         stream.Write(headerBytes);
 
         // write filter ids
