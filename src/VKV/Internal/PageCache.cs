@@ -72,14 +72,14 @@ public sealed class PageCache : IDisposable
         IPageLoader pageLoader,
         int capacity,
         IPageFilter[]? filters,
-        double smallFraction = 0.1,
+        double smallFraction = 0.2,
         double ghostFraction = 1.0)
     {
         this.pageLoader = pageLoader;
         this.capacity = capacity;
         this.filters = filters;
 
-        sTargetSize = Math.Max(1, (int)(capacity * smallFraction));
+        sTargetSize = Math.Max(2, (int)(capacity * smallFraction));
         mTargetSize = capacity - sTargetSize;
 
         map = new ConcurrentDictionary<PageNumber, Entry>(
@@ -152,7 +152,7 @@ public sealed class PageCache : IDisposable
         {
             PageNumber = pageNumber,
             Buffer = buffer,
-            Frequency = 0,
+            Frequency = 1,
             Tag = QueueTag.None,
             RefCount = 1
         };

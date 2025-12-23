@@ -29,7 +29,7 @@ public record DatabaseLoadOptions
         throw new NotSupportedException($"unsupported stream type: {stream.GetType().Name}");
     };
 
-    public int PageCacheCapacity { get; set; } = 8;
+    public int CacheSize { get; set; } = 2000 * 1024 * 1024;
     public StorageFactory StorageFactory { get; set; } = DefaultStorageFactory;
 }
 
@@ -47,17 +47,18 @@ public sealed class ReadOnlyDatabase : IDisposable
         options ??= DatabaseLoadOptions.Default;
         var catalog = await VKVCodec.ParseCatalogAsync(stream, cancellationToken);
         var storage = options.StorageFactory.Invoke(stream, catalog.PageSize);
-        return new ReadOnlyDatabase(catalog, storage, options.PageCacheCapacity);
+        return new ReadOnlyDatabase(catalog, storage, options.CacheSize);
     }
 
     public Catalog Catalog { get; }
     readonly IPageLoader pageLoader;
     readonly PageCache pageCache;
 
-    ReadOnlyDatabase(Catalog catalog, IPageLoader pageLoader, int pageCacheCapacity)
+    ReadOnlyDatabase(Catalog catalog, IPageLoader pageLoader, int cacheSize)
     {
         Catalog = catalog;
         this.pageLoader = pageLoader;
+        var pageCacheCapacity = Math.Max(cacheSize / catalog.PageSize, 8);
         pageCache = new PageCache(pageLoader, pageCacheCapacity, catalog.Filters?.ToArray() ?? []);
     }
 

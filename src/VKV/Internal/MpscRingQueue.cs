@@ -64,7 +64,7 @@ sealed class MpscRingQueue<T> where T : class
         }
     }
 
-    public bool TryDequeue(out T? item)
+    public bool TryDequeue(out T item)
     {
         while (true)
         {
@@ -77,13 +77,13 @@ sealed class MpscRingQueue<T> where T : class
             switch (diff)
             {
                 case 0:
-                    item = slot.Item;
+                    item = slot.Item!;
                     slot.Item = null;
                     Volatile.Write(ref slot.Sequence, h + buffer.Length);
                     Volatile.Write(ref head, h + 1);
                     return true;
                 case < 0:
-                    item = null;
+                    item = null!;
                     return false; // empty
             }
             // retry
