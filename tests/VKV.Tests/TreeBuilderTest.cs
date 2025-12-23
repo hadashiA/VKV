@@ -20,7 +20,7 @@ public class TreeBuilderTest
         };
 
         var memoryStream = new MemoryStream();
-        var pos = await TreeBuilder.BuildToAsync(
+        var buildResult = await TreeBuilder.BuildToAsync(
             memoryStream,
             128,
             keyValues);
@@ -28,7 +28,7 @@ public class TreeBuilderTest
         var result = memoryStream.ToArray();
         var header = NodeHeader.Parse(result);
 
-        Assert.That(pos.Value, Is.EqualTo(0));
+        Assert.That(buildResult.RootPageNumber.Value, Is.EqualTo(0));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Leaf));
     }
 
@@ -50,18 +50,18 @@ public class TreeBuilderTest
         };
 
         var memoryStream = new MemoryStream();
-        var pos = await TreeBuilder.BuildToAsync(
+        var buildResult = await TreeBuilder.BuildToAsync(
             memoryStream,
             128,
             keyValues);
 
         var result = memoryStream.ToArray();
 
-        var header = NodeHeader.Parse(result.AsSpan((int)pos.Value));
+        var header = NodeHeader.Parse(result.AsSpan((int)buildResult.RootPageNumber.Value));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Internal));
         Assert.That(header.EntryCount, Is.EqualTo(2));
 
-        var internalNode = new InternalNodeReader(result.AsSpan((int)pos.Value), header.EntryCount);
+        var internalNode = new InternalNodeReader(result.AsSpan((int)buildResult.RootPageNumber.Value), header.EntryCount);
         internalNode.GetAt(0, out var internalKey1, out var childPosition1);
         internalNode.GetAt(1, out var internalKey2, out var childPosition2);
 

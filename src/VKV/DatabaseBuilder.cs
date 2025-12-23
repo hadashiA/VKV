@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -262,7 +263,7 @@ public class DatabaseBuilder : IDisposable
         header.TableCount = (ushort)tableBuilders.Count;
 
         Span<byte> headerBytes = stackalloc byte[Unsafe.SizeOf<Header>()];
-        Unsafe.WriteUnaligned(ref GetReference(headerBytes), header);
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(headerBytes), header);
         stream.Write(headerBytes);
 
         // write filter ids

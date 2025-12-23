@@ -55,7 +55,7 @@ static class TreeBuilder
         IReadOnlyList<IPageFilter>? pageFilters = null,
         CancellationToken cancellationToken = default)
     {
-        if (pageSize < PageHeaderSize + 128)
+        if (pageSize < PageHeaderSize + 32)
         {
             throw new ArgumentException("pageSize too small");
         }

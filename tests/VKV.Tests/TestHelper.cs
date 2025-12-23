@@ -14,7 +14,7 @@ static class TestHelper
     public static async ValueTask<TreeWalker> BuildTreeAsync(KeyValueList keyValues, int pageSize)
     {
         var memoryStream = new MemoryStream();
-        var pos = await TreeBuilder.BuildToAsync(
+        var buildResult = await TreeBuilder.BuildToAsync(
             memoryStream,
             pageSize,
             keyValues);
@@ -22,7 +22,7 @@ static class TestHelper
         var result = memoryStream.ToArray();
         var storage = new InMemoryPageLoader(result.ToArray());
         var pageCache = new PageCache(storage, 8, []);
-        return new TreeWalker(pos, pageCache, KeyEncoding.Ascii);
+        return new TreeWalker(buildResult.RootPageNumber, pageCache, KeyEncoding.Ascii);
     }
 
     public static async ValueTask<ReadOnlyTable> BuildTableAsync(
