@@ -24,7 +24,7 @@ static class BufferWriterPool
     }
 }
 
-readonly struct PooledBuffer<T>(T[] array, int offset, int length) : IMemoryOwner<T>
+sealed class PooledBuffer<T>(T[] array, int offset, int length) : IMemoryOwner<T>
 {
     public Memory<T> Memory => new(array, offset, length);
 
