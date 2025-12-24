@@ -123,6 +123,7 @@ class TreeWalker
 
         while (true)
         {
+            var retain = false;
             try
             {
                 var pageSpan = page.Memory.Span;
@@ -151,8 +152,8 @@ class TreeWalker
                         }
                     }
                     result.Add(page, valuePageOffset, valueLength);
-
                     entryIndex++;
+                    retain = true;
                 }
 
                 // next node
@@ -170,7 +171,7 @@ class TreeWalker
             }
             finally
             {
-                page.Release();
+                if (!retain) page.Release();
             }
         }
     }
@@ -222,6 +223,7 @@ class TreeWalker
 
         while (true)
         {
+            var retain = false;
             try
             {
                 var pageSpan = page.Memory.Span;
@@ -252,6 +254,7 @@ class TreeWalker
                     result.Add(page, valuePageOffset, valueLength);
 
                     entryIndex++;
+                    retain = true;
                 }
 
                 // next node
@@ -269,7 +272,7 @@ class TreeWalker
             }
             finally
             {
-                page.Release();
+                if (!retain) page.Release();
             }
         }
     }

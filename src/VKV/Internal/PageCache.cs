@@ -41,6 +41,23 @@ public sealed class PageCache : IDisposable
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryRetainIfAlive()
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref RefCount);
+                if (current <= 0)
+                    return false;
+
+                var next = current + 1;
+
+                int original = Interlocked.CompareExchange(ref RefCount, next, current);
+                if (original == current)
+                    return true;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Release()
         {
             if (Interlocked.Decrement(ref RefCount) == 0)
@@ -115,6 +132,12 @@ public sealed class PageCache : IDisposable
     {
         if (map.TryGetValue(pageNumber, out var entry))
         {
+            if (!entry.TryRetainIfAlive())
+            {
+                page = null!;
+                return false;
+            }
+
             // freq++（max: 3）
             while (true)
             {
@@ -125,7 +148,6 @@ public sealed class PageCache : IDisposable
                     break;
                 }
             }
-            entry.Retain();
             page = entry;
             return true;
         }

@@ -87,8 +87,11 @@ public class SecondaryIndexQueryTest
 
         var query = table.WithIndex("category");
         var result = query.GetRange(
-            "category:key00001"u8,
-            "category:key00010"u8);
-        Assert.That(result.Count, Is.EqualTo(11));
+            "category:key00201"u8,
+            "category:key00210"u8);
+
+        Assert.That(result.Count, Is.EqualTo(10));
+        Assert.That(Encoding.ASCII.GetString(result[0].Span), Is.EqualTo("value00201"));
+        Assert.That(Encoding.ASCII.GetString(result[9].Span), Is.EqualTo("value00210"));
     }
 }

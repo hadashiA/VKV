@@ -22,6 +22,8 @@ public class RangeResult : IDisposable, IEnumerable<ReadOnlyMemory<byte>>
 
     public int Count => list.Count;
 
+    public ReadOnlyMemory<byte> this[int i] => list[i];
+
     readonly List<ReadOnlyMemory<byte>> list = [];
     readonly List<IPageEntry> referencePages = [];
 
