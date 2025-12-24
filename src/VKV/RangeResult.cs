@@ -22,20 +22,21 @@ public class RangeResult : IDisposable, IEnumerable<ReadOnlyMemory<byte>>
 
     public int Count => list.Count;
 
+    public ReadOnlyMemory<byte> this[int i] => list[i];
+
     readonly List<ReadOnlyMemory<byte>> list = [];
     readonly List<IPageEntry> referencePages = [];
 
     internal void Add(IPageEntry page, int start, int length)
     {
         list.Add(page.Memory.Slice(start, length));
-        if (!referencePages.Contains(page))
-        {
-            referencePages.Add(page);
-        }
+        referencePages.Add(page);
     }
 
     public void Dispose()
     {
+        if (this == Empty) return;
+
         foreach (var referencePage in referencePages)
         {
             referencePage.Release();

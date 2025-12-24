@@ -18,6 +18,8 @@ using static System.Runtime.CompilerServices.MemoryMarshalEx;
 
 namespace VKV;
 
+public delegate ReadOnlyMemory<byte> SecondaryIndexFactory(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value);
+
 public abstract class IndexOptions(string name, bool isUnique)
 {
     public string Name => name;
@@ -34,8 +36,8 @@ public class PrimaryKeyIndexOptions(string name) : IndexOptions(name, true)
 
 public class SecondaryIndexOptions(string name, bool isUnique) : IndexOptions(name, isUnique)
 {
-    public override ValueKind ValueKind => ValueKind.PrimaryKey;
-    public required Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> ValueToIndexFactory;
+    public override ValueKind ValueKind => ValueKind.PageRef;
+    public required SecondaryIndexFactory IndexFactory;
 }
 
 public class FilterOptions
@@ -78,12 +80,12 @@ public class TableBuilder
         string indexName,
         bool isUnique,
         IKeyEncoding keyEncoding,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> valueToIndexFactory)
+        SecondaryIndexFactory indexFactory)
     {
         secondaryIndexOptions.Add(new SecondaryIndexOptions(indexName, isUnique)
         {
             KeyEncoding = keyEncoding,
-            ValueToIndexFactory = valueToIndexFactory,
+            IndexFactory = indexFactory,
         });
     }
 
@@ -121,7 +123,7 @@ public class TableBuilder
         // build secondary index length
         Span<byte> indexCountBuffer = stackalloc byte[sizeof(ushort)];
         BinaryPrimitives.WriteUInt16LittleEndian(indexCountBuffer, (ushort)SecondaryIndexOptions.Count);
-        stream.Write(indexCountBuffer[..sizeof(ushort)]);
+        stream.Write(indexCountBuffer);
 
         // build secondary index descriptors
         foreach (var indexOptions in SecondaryIndexOptions)
@@ -131,33 +133,41 @@ public class TableBuilder
         }
 
         // write primary tree
-        var rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
+        var primaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
 
         // write primary tree root position
         Span<byte> positionBuffer = stackalloc byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, primaryKeyResult.RootPageNumber.Value);
+        var currentPosition = stream.Position;
         stream.Seek(descriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
-        BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, rootPosition.Value);
         stream.Write(positionBuffer);
+        stream.Seek(currentPosition, SeekOrigin.Begin);
 
         // write secondary tree root positions
         for (var i = 0; i < SecondaryIndexOptions.Count; i++)
         {
             var indexOptions = SecondaryIndexOptions[i];
-            var indexToPrimaryKeyPairs = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
-            foreach (var (k, v) in keyValues)
+            var secondaryKeyValues = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
+            var primaryKeyIndex = 0;
+            foreach (var (primaryKey, value) in keyValues)
             {
-                var index = indexOptions.ValueToIndexFactory.Invoke(v);
-                indexToPrimaryKeyPairs.Add(index, k);
+                var secondaryKey = indexOptions.IndexFactory.Invoke(primaryKey, value);
+                var valuePointer = primaryKeyResult.WroteValueRefs[primaryKeyIndex];
+                secondaryKeyValues.Add(secondaryKey, valuePointer.Encode());
+                primaryKeyIndex++;
             }
 
-            // write primary tree
-            rootPosition = await TreeBuilder.BuildToAsync(stream, pageSize, indexToPrimaryKeyPairs, pageFilters, cancellationToken);
+            // write secondary key tree
+            var secondaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, secondaryKeyValues, pageFilters, cancellationToken);
 
-            // write primary tree root position
+            // write secondary tree root position
             Span<byte> positionBuffer2 = stackalloc byte[sizeof(long)];
+            BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, secondaryKeyResult.RootPageNumber.Value);
+
+            var currentPosition2 = stream.Position;
             stream.Seek(descriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
-            BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, rootPosition.Value);
             stream.Write(positionBuffer2);
+            stream.Seek(currentPosition2, SeekOrigin.Begin);
         }
     }
 

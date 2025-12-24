@@ -26,7 +26,6 @@ public static class KeyEncoding
 {
     public static Int64LittleEndianEncoding Int64LittleEndian => Int64LittleEndianEncoding.Instance;
     public static AsciiOrdinalEncoding Ascii => AsciiOrdinalEncoding.Instance;
-    public static Utf8OrdinalEncoding Utf8 => Utf8OrdinalEncoding.Instance;
 
     static readonly ConcurrentDictionary<string, IKeyEncoding> registry = new();
 
@@ -36,7 +35,6 @@ public static class KeyEncoding
         {
             "i64" => Int64LittleEndianEncoding.Instance,
             "ascii" => AsciiOrdinalEncoding.Instance,
-            "u8" => Utf8OrdinalEncoding.Instance,
             _ => registry[id]
         };
     }
@@ -177,117 +175,6 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
         try
         {
             bytesWritten = Encoding.ASCII.GetBytes(formattedString, destination);
-            return true;
-        }
-        catch (ArgumentException ex)
-        {
-            bytesWritten = 0;
-            return false;
-        }
-#endif
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y)
-    {
-        return Compare(x.Span, y.Span);
-    }
-}
-
-public sealed class Utf8OrdinalEncoding : IKeyEncoding
-{
-    public static readonly Utf8OrdinalEncoding Instance = new();
-
-    public string Id => "u8";
-
-    public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
-    {
-        int ia = 0, ib = 0;
-
-        while (ia < a.Length && ib < b.Length)
-        {
-            while (ia < a.Length && ib < b.Length)
-            {
-                var ba = a[ia];
-                var bb = b[ib];
-                var aAscii = ba < 0x80;
-                var bAscii = bb < 0x80;
-
-                if (aAscii && bAscii)
-                {
-                    if (ba != bb) return ba - bb;
-                    ia++; ib++;
-                    continue;
-                }
-                break;
-            }
-
-            if (ia >= a.Length || ib >= b.Length) break;
-
-            throw new NotSupportedException("TODO");
-
-            var sa = a[ia..];
-            var sb = b[ib..];
-
-            // var statusA = Rune.DecodeFromUtf8(sa, out var ra, out var ca);
-            // var statusB = Rune.DecodeFromUtf8(sb, out var rb, out var cb);
-            //
-            // if (statusA != OperationStatus.Done)
-            // {
-            //     ra = new Rune(0xFFFD);
-            //     ca = Math.Max(1, Math.Min(4, sa.Length));
-            // }
-            //
-            // if (statusB != OperationStatus.Done)
-            // {
-            //     rb = new Rune(0xFFFD);
-            //     cb = Math.Max(1, Math.Min(4, sb.Length));
-            // }
-            //
-            // if (ra.Value != rb.Value)
-            //     return ra.Value - rb.Value;
-            //
-            // ia += ca;
-            // ib += cb;
-        }
-
-        return (a.Length - ia) - (b.Length - ib);
-    }
-
-    public int GetMaxEncodedByteCount<TKey>(TKey key) where TKey : IComparable<TKey>
-    {
-        var stringKey = Unsafe.As<TKey, string>(ref key);
-        return Encoding.UTF8.GetMaxByteCount(stringKey.Length);
-    }
-
-    public bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
-        where TKey : IComparable<TKey>
-    {
-        var stringKey = Unsafe.As<TKey, string>(ref key);
-#if NET8_0_OR_GREATER
-        return Encoding.UTF8.TryGetBytes(stringKey, destination, out bytesWritten);
-#else
-        try
-        {
-            bytesWritten = Encoding.UTF8.GetBytes(stringKey, destination);
-            return true;
-        }
-        catch (ArgumentException ex)
-        {
-            bytesWritten = 0;
-            return false;
-        }
-#endif
-    }
-
-    public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
-    {
-#if NET8_0_OR_GREATER
-        return Encoding.UTF8.TryGetBytes(formattedString, destination, out bytesWritten);
-#else
-        try
-        {
-            bytesWritten = Encoding.UTF8.GetBytes(formattedString, destination);
             return true;
         }
         catch (ArgumentException ex)

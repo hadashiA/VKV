@@ -47,7 +47,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
             meta.ValueLength);
     }
 
-    public void GetAt(int index, out ReadOnlySpan<byte> key, out int valuePageOffset, out ushort valueLength)
+    public void GetAt(int index, out ReadOnlySpan<byte> key, out int valuePageOffset, out int valueLength)
     {
 #if NETSTANDARD
         ref var pageReference = ref MemoryMarshal.GetReference(page);

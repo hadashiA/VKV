@@ -15,32 +15,30 @@ public interface IKeyValueStore
     RangeResult GetRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder);
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending);
 
     ValueTask<RangeResult> GetRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending,
         CancellationToken cancellationToken = default);
 
     int CountRange(
         ReadOnlySpan<byte> startKey,
         ReadOnlySpan<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive);
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false);
 
     ValueTask<int> CountRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
         CancellationToken cancellationToken = default);
-
-    RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward);
 }
 
 public static class KeyValueStoreExtensions

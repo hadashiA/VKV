@@ -34,7 +34,6 @@ class TreeWalker
         comparer = keyEncoding switch
         {
             AsciiOrdinalEncoding => AsciiOrdinalEncoding.Instance,
-            Utf8OrdinalEncoding => Utf8OrdinalEncoding.Instance,
             Int64LittleEndianEncoding => Int64LittleEndianEncoding.Instance,
             _ => keyEncoding
         };
@@ -46,7 +45,7 @@ class TreeWalker
         PageNumber? next = RootPageNumber;
         PageSlice pageSlice;
 
-        while (!TryFindFrom(next.Value, key, out pageSlice, out next))
+        while (!TryFindFrom(next.Value, key, out _, out pageSlice, out next))
         {
             if (!next.HasValue) return SingleValueResult.Empty;
             PageCache.Load(next.Value);
@@ -62,7 +61,7 @@ class TreeWalker
         PageSlice resultValue;
         PageNumber? next = RootPageNumber;
 
-        while (!TryFindFrom(next.Value, key.Span, out resultValue, out next))
+        while (!TryFindFrom(next.Value, key.Span, out _, out resultValue, out next))
         {
             if (!next.HasValue)
             {
@@ -87,7 +86,7 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        int index;
+        int entryIndex;
         IPageEntry page = default!;
 
         // find start position
@@ -99,7 +98,7 @@ class TreeWalker
                 return RangeResult.Empty;
             }
             page = minValue.Value.Page;
-            index = minValue.Value.Index;
+            entryIndex = 0;
         }
         else
         {
@@ -108,7 +107,7 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-                       out index,
+                       out entryIndex,
                        out nextPageNumber))
             {
                 if (!nextPageNumber.HasValue) return RangeResult.Empty;
@@ -124,6 +123,7 @@ class TreeWalker
 
         while (true)
         {
+            var retain = false;
             try
             {
                 var pageSpan = page.Memory.Span;
@@ -134,10 +134,10 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                while (index < header.EntryCount)
+                while (entryIndex < header.EntryCount)
                 {
                     leafNode.GetAt(
-                        index,
+                        entryIndex,
                         out var key,
                         out var valuePageOffset,
                         out var valueLength);
@@ -152,8 +152,8 @@ class TreeWalker
                         }
                     }
                     result.Add(page, valuePageOffset, valueLength);
-
-                    index++;
+                    entryIndex++;
+                    retain = true;
                 }
 
                 // next node
@@ -167,11 +167,11 @@ class TreeWalker
                 {
                     PageCache.Load(pageNumber);
                 }
-                index = 0;
+                entryIndex = 0;
             }
             finally
             {
-                page.Release();
+                if (!retain) page.Release();
             }
         }
     }
@@ -186,7 +186,7 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        int index;
+        int entryIndex;
         IPageEntry page = default!;
 
         // find start position
@@ -198,7 +198,7 @@ class TreeWalker
                 return RangeResult.Empty;
             }
             page = minValue.Value.Page;
-            index = minValue.Value.Index;
+            entryIndex = 0;
         }
         else
         {
@@ -207,7 +207,7 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-                       out index,
+                       out entryIndex,
                        out nextPageNumber))
             {
                 if (!nextPageNumber.HasValue) return RangeResult.Empty;
@@ -223,6 +223,7 @@ class TreeWalker
 
         while (true)
         {
+            var retain = false;
             try
             {
                 var pageSpan = page.Memory.Span;
@@ -233,10 +234,10 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                while (index < header.EntryCount)
+                while (entryIndex < header.EntryCount)
                 {
                     leafNode.GetAt(
-                        index,
+                        entryIndex,
                         out var key,
                         out var valuePageOffset,
                         out var valueLength);
@@ -252,7 +253,8 @@ class TreeWalker
                     }
                     result.Add(page, valuePageOffset, valueLength);
 
-                    index++;
+                    entryIndex++;
+                    retain = true;
                 }
 
                 // next node
@@ -266,11 +268,11 @@ class TreeWalker
                 {
                     await PageCache.LoadAsync(pageNumber, cancellationToken).ConfigureAwait(false);
                 }
-                index = 0;
+                entryIndex = 0;
             }
             finally
             {
-                page.Release();
+                if (!retain) page.Release();
             }
         }
     }
@@ -285,7 +287,7 @@ class TreeWalker
 
         IPageEntry page = default!;
 
-        int index;
+        int entryIndex;
         // find start position
         if (startKey.IsEmpty)
         {
@@ -295,7 +297,7 @@ class TreeWalker
                 return 0;
             }
             page = minValue.Value.Page;
-            index = minValue.Value.Index;
+            entryIndex = 0;
         }
         else
         {
@@ -304,7 +306,7 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-                       out index,
+                       out entryIndex,
                        out nextPageNumber))
             {
                 if (!nextPageNumber.HasValue) return 0;
@@ -330,10 +332,10 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                while (index < header.EntryCount)
+                while (entryIndex < header.EntryCount)
                 {
                     leafNode.GetAt(
-                        index,
+                        entryIndex,
                         out var key,
                         out var valuePageOffset,
                         out var valueLength);
@@ -349,7 +351,7 @@ class TreeWalker
                     }
 
                     count++;
-                    index++;
+                    entryIndex++;
                 }
 
                 // next node
@@ -363,7 +365,7 @@ class TreeWalker
                 {
                     PageCache.Load(pageNumber);
                 }
-                index = 0;
+                entryIndex = 0;
             }
             finally
             {
@@ -381,7 +383,7 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        int index;
+        int entryIndex;
         IPageEntry page = default!;
 
         // find start position
@@ -393,7 +395,7 @@ class TreeWalker
                 return 0;
             }
             page = minValue.Value.Page;
-            index = minValue.Value.Index;
+            entryIndex = 0;
         }
         else
         {
@@ -402,7 +404,7 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
-                       out index,
+                       out entryIndex,
                        out nextPageNumber))
             {
                 if (!nextPageNumber.HasValue) return 0;
@@ -428,10 +430,10 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                while (index < header.EntryCount)
+                while (entryIndex < header.EntryCount)
                 {
                     leafNode.GetAt(
-                        index,
+                        entryIndex,
                         out var key,
                         out var valuePageOffset,
                         out var valueLength);
@@ -447,7 +449,7 @@ class TreeWalker
                     }
 
                     count++;
-                    index++;
+                    entryIndex++;
                 }
 
                 // next node
@@ -461,7 +463,7 @@ class TreeWalker
                 {
                     await PageCache.LoadAsync(pageNumber, cancellationToken).ConfigureAwait(false);
                 }
-                index = 0;
+                entryIndex = 0;
             }
             finally
             {
@@ -472,13 +474,15 @@ class TreeWalker
 
     internal bool TryFind(
         scoped ReadOnlySpan<byte> key,
+        out ushort entryIndex,
         out PageSlice value,
         out PageNumber? next) =>
-        TryFindFrom(RootPageNumber, key, out value, out next);
+        TryFindFrom(RootPageNumber, key, out entryIndex, out value, out next);
 
     internal bool TryFindFrom(
         PageNumber from,
         scoped ReadOnlySpan<byte> key,
+        out ushort entryIndex,
         out PageSlice value,
         out PageNumber? next)
     {
@@ -487,6 +491,7 @@ class TreeWalker
         {
             if (!PageCache.TryGet(pageNumber, out var page))
             {
+                entryIndex = default;
                 value = default;
                 next = pageNumber;
                 return false;
@@ -500,6 +505,7 @@ class TreeWalker
                 if (!internalNode.TrySearch(key, KeyEncoding, out pageNumber))
                 {
                     page.Release();
+                    entryIndex = default;
                     value = default;
                     next = null;
                     return false;
@@ -512,9 +518,9 @@ class TreeWalker
                 next = null;
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                if (leafNode.TryFindValue(key, KeyEncoding, out var valueOffset, out var valueLength, out var index))
+                if (leafNode.TryFindValue(key, KeyEncoding, out var valueOffset, out var valueLength, out entryIndex))
                 {
-                    value = new PageSlice(page, valueOffset, valueLength, index);
+                    value = new PageSlice(page, valueOffset, valueLength);
                     return true;
                 }
 
@@ -614,7 +620,7 @@ class TreeWalker
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 leafNode.GetAt(0, out _, out var valuePageOffset, out var valueLength);
-                var pageSlice = new PageSlice(page, valuePageOffset, valueLength, 0);
+                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
                 return new SingleValueResult(pageSlice, true);
             }
         }
@@ -653,7 +659,7 @@ class TreeWalker
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 leafNode.GetAt(header.EntryCount - 1, out _, out var valuePageOffset, out var valueLength);
-                var pageSlice = new PageSlice(page, valuePageOffset, valueLength, (ushort)(header.EntryCount - 1));
+                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
                 return new SingleValueResult(pageSlice, true);
             }
         }
