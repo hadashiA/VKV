@@ -69,7 +69,7 @@ public readonly struct SecondaryIndexQuery : IKeyValueStore
         using var pageRefs = tree.GetRange(startKey, endKey, startKeyExclusive, endKeyExclusive, sortOrder);
         if (pageRefs.Count <= 0)
         {
-            return [];
+            return RangeResult.Empty;
         }
 
         var result = RangeResult.Rent();

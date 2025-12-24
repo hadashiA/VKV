@@ -28,14 +28,13 @@ public class RangeResult : IDisposable, IEnumerable<ReadOnlyMemory<byte>>
     internal void Add(IPageEntry page, int start, int length)
     {
         list.Add(page.Memory.Slice(start, length));
-        if (!referencePages.Contains(page))
-        {
-            referencePages.Add(page);
-        }
+        referencePages.Add(page);
     }
 
     public void Dispose()
     {
+        if (this == Empty) return;
+
         foreach (var referencePage in referencePages)
         {
             referencePage.Release();
