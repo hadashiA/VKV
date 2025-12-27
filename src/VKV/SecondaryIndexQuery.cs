@@ -2,19 +2,19 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.BTree;
+using VKV.Internal;
 
 namespace VKV;
 
-// TODO: non-unique
-public readonly struct SecondaryIndexQuery : IKeyValueStore
+public class SecondaryIndexQuery : IKeyValueStore
 {
     public IKeyEncoding KeyEncoding => tree.KeyEncoding;
 
     readonly TreeWalker tree;
 
-    internal SecondaryIndexQuery(TreeWalker tree)
+    internal SecondaryIndexQuery(IndexDescriptor descriptor, PageCache pageCache)
     {
-        this.tree = tree;
+        tree = new TreeWalker(descriptor.RootPageNumber, pageCache, descriptor.KeyEncoding);
     }
 
     public SingleValueResult Get(ReadOnlySpan<byte> key)

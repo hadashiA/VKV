@@ -12,7 +12,7 @@ public class TreeBuilderTest
     [Test]
     public async Task Build_SingleLeaf()
     {
-        var keyValues = new KeyValueList(KeyEncoding.Ascii, true)
+        var keyValues = new UniqueKeyValueList(KeyEncoding.Ascii)
         {
             { "key1"u8.ToArray(), "value1"u8.ToArray() },
             { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -35,7 +35,7 @@ public class TreeBuilderTest
     [Test]
     public async Task Build_Depth2()
     {
-        var keyValues = new KeyValueList(KeyEncoding.Ascii, true)
+        var keyValues = new UniqueKeyValueList(KeyEncoding.Ascii)
         {
             { "key01"u8.ToArray(), "value01"u8.ToArray() },
             { "key02"u8.ToArray(), "value02"u8.ToArray() },

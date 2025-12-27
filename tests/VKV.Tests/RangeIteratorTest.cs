@@ -11,7 +11,7 @@ public class RangeIteratorTest
     public async Task MoveNext_FirstValue()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -34,7 +34,7 @@ public class RangeIteratorTest
     public async Task Seek()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -75,7 +75,7 @@ public class RangeIteratorTest
     public async Task MoveNextAsync_FirstValue()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },

@@ -107,15 +107,13 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       out page,
                        out entryIndex,
                        out nextPageNumber))
             {
                 if (!nextPageNumber.HasValue) return RangeResult.Empty;
 
-                while (!PageCache.TryGet(nextPageNumber.Value, out page))
-                {
-                    PageCache.Load(nextPageNumber.Value);
-                }
+                PageCache.Load(nextPageNumber.Value);
             }
         }
 
@@ -207,15 +205,12 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       out page,
                        out entryIndex,
                        out nextPageNumber))
             {
                 if (!nextPageNumber.HasValue) return RangeResult.Empty;
-
-                while (!PageCache.TryGet(nextPageNumber.Value, out page))
-                {
-                    await PageCache.LoadAsync(nextPageNumber.Value, cancellationToken).ConfigureAwait(false);
-                }
+                await PageCache.LoadAsync(nextPageNumber.Value, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -306,6 +301,7 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       out page,
                        out entryIndex,
                        out nextPageNumber))
             {
@@ -404,6 +400,7 @@ class TreeWalker
                        nextPageNumber.Value,
                        startKey.Span,
                        startKeyExclusive ? SearchOperator.UpperBound : SearchOperator.LowerBound,
+                       out page,
                        out entryIndex,
                        out nextPageNumber))
             {
@@ -534,21 +531,23 @@ class TreeWalker
     internal bool TrySearch(
         scoped ReadOnlySpan<byte> key,
         SearchOperator op,
+        out IPageEntry page,
         out int index,
         out PageNumber? nextPageNumber) =>
-        TrySearch(RootPageNumber, key, op, out index, out nextPageNumber);
+        TrySearch(RootPageNumber, key, op, out page, out index, out nextPageNumber);
 
     internal bool TrySearch(
         PageNumber from,
         scoped ReadOnlySpan<byte> key,
         SearchOperator op,
+        out IPageEntry page,
         out int index,
         out PageNumber? nextPageNumber)
     {
         var pageNumber = from;
         while (true)
         {
-            if (!PageCache.TryGet(pageNumber, out var page))
+            if (!PageCache.TryGet(pageNumber, out page))
             {
                 index = default;
                 nextPageNumber = pageNumber;

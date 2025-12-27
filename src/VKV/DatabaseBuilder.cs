@@ -73,7 +73,7 @@ public class TableBuilder
         this.pageSize = pageSize;
         this.pageFilters = pageFilters;
         PrimaryKeyEncoding = primaryKeyEncoding;
-        keyValues = new KeyValueList(PrimaryKeyEncoding);
+        keyValues = KeyValueList.Create(PrimaryKeyEncoding, true);
     }
 
     public void AddSecondaryIndex(
@@ -147,7 +147,7 @@ public class TableBuilder
         for (var i = 0; i < SecondaryIndexOptions.Count; i++)
         {
             var indexOptions = SecondaryIndexOptions[i];
-            var secondaryKeyValues = new KeyValueList(indexOptions.KeyEncoding, indexOptions.IsUnique);
+            var secondaryKeyValues = KeyValueList.Create(indexOptions.KeyEncoding, indexOptions.IsUnique);
             var primaryKeyIndex = 0;
             foreach (var (primaryKey, value) in keyValues)
             {
