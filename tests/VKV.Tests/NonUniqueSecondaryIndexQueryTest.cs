@@ -31,7 +31,7 @@ public class NonUniqueSecondaryIndexQueryTest
             });
 
         var query = table.WithIndex("category");
-        var result = query.GetRange("category:020"u8, "category:020"u8);
+        var result = query.GetAll("category:020"u8);
         Assert.That(result.Count, Is.EqualTo(10));
         Assert.That(Encoding.ASCII.GetString(result[0].Span), Is.EqualTo("value00200"));
         Assert.That(Encoding.ASCII.GetString(result[9].Span), Is.EqualTo("value00209"));
