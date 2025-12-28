@@ -18,7 +18,7 @@ public sealed class ReadOnlyTable : IKeyValueStore
 
     readonly TableDescriptor descriptor;
     readonly TreeWalker primaryKeyTree;
-    readonly Dictionary<string, TreeWalker> secondaryIndexTrees;
+    readonly Dictionary<string, IKeyValueStore> secondaryIndexQueries;
 
     internal ReadOnlyTable(TableDescriptor descriptor, PageCache pageCache)
     {
@@ -30,14 +30,14 @@ public sealed class ReadOnlyTable : IKeyValueStore
             pageCache,
             descriptor.PrimaryKeyDescriptor.KeyEncoding);
 
-        secondaryIndexTrees = new Dictionary<string, TreeWalker>(descriptor.IndexDescriptors.Count);
+        secondaryIndexQueries = new Dictionary<string, IKeyValueStore>(descriptor.IndexDescriptors.Count);
         foreach (var indexDescriptor in descriptor.IndexDescriptors)
         {
-            var indexIterator = new TreeWalker(
-                indexDescriptor.RootPageNumber,
-                pageCache,
-                indexDescriptor.KeyEncoding);
-            secondaryIndexTrees.Add(indexDescriptor.Name, indexIterator);
+            IKeyValueStore query = indexDescriptor.IsUnique
+                ? new SecondaryIndexQuery(indexDescriptor, pageCache)
+                : new NonUniqueSecondaryIndexQuery(indexDescriptor, pageCache);
+
+            secondaryIndexQueries.Add(indexDescriptor.Name, query);
         }
     }
 
@@ -160,6 +160,5 @@ public sealed class ReadOnlyTable : IKeyValueStore
     public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(primaryKeyTree, iteratorDirection);
 
-    public SecondaryIndexQuery WithIndex(string indexName) =>
-        new(secondaryIndexTrees[indexName]);
+    public IKeyValueStore WithIndex(string indexName) => secondaryIndexQueries[indexName];
 }

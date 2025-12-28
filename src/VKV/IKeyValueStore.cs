@@ -79,9 +79,9 @@ public static class KeyValueStoreExtensions
         this IKeyValueStore kv,
         TKey? startKey,
         TKey? endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder)
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder = SortOrder.Ascending)
         where TKey : IComparable<TKey>
     {
         var startKeyBuffer = startKey != null
@@ -122,9 +122,9 @@ public static class KeyValueStoreExtensions
         this IKeyValueStore kv,
         TKey? startKey,
         TKey? endKey,
-        bool startKeyExclusive,
-        bool endKeyExclusive,
-        SortOrder sortOrder,
+        bool startKeyExclusive = false,
+        bool endKeyExclusive = false,
+        SortOrder sortOrder =  SortOrder.Ascending,
         CancellationToken cancellationToken = default)
         where TKey : IComparable<TKey>
     {
@@ -268,5 +268,35 @@ public static class KeyValueStoreExtensions
             if (startKeyBuffer != null) ArrayPool<byte>.Shared.Return(startKeyBuffer);
             if (endKeyBuffer != null) ArrayPool<byte>.Shared.Return(endKeyBuffer);
         }
+    }
+
+    public static RangeResult GetAll(this IKeyValueStore kv, ReadOnlySpan<byte> key, SortOrder sortOrder = SortOrder.Ascending)
+    {
+        return kv.GetRange(key, key, sortOrder: sortOrder);
+    }
+
+    public static RangeResult GetAll<TKey>(this IKeyValueStore kv, TKey key, SortOrder sortOrder = SortOrder.Ascending)
+        where TKey : IComparable<TKey>
+    {
+        return kv.GetRange(key, key, sortOrder: sortOrder);
+    }
+
+    public static ValueTask<RangeResult> GetAllAsync(
+        this IKeyValueStore kv,
+        ReadOnlyMemory<byte> key,
+        SortOrder sortOrder = SortOrder.Ascending,
+        CancellationToken cancellationToken = default)
+    {
+        return kv.GetRangeAsync(key, key, sortOrder: sortOrder, cancellationToken: cancellationToken);
+    }
+
+    public static ValueTask<RangeResult> GetAllAsync<TKey>(
+        this IKeyValueStore kv,
+        TKey key,
+        SortOrder sortOrder = SortOrder.Ascending,
+        CancellationToken cancellationToken = default)
+        where TKey : IComparable<TKey>
+    {
+        return kv.GetRangeAsync(key, key, sortOrder: sortOrder, cancellationToken: cancellationToken);
     }
 }

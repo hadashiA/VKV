@@ -12,7 +12,7 @@ public class TreeWalkerTest
     public async Task SearchOperator_Equal()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -30,6 +30,7 @@ public class TreeWalkerTest
         var result = tree.TrySearch(
             "key3"u8.ToArray(),
             SearchOperator.Equal,
+            out _,
             out var index,
             out var nextPageNumber);
 
@@ -42,6 +43,7 @@ public class TreeWalkerTest
         result = tree.TrySearch(
             "key3"u8.ToArray(),
             SearchOperator.Equal,
+            out _,
             out index,
             out nextPageNumber);
         Assert.That(result, Is.True);
@@ -61,7 +63,7 @@ public class TreeWalkerTest
     public async Task SearchOperator_LowerBound()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key01"u8.ToArray(), "value01"u8.ToArray() },
                 { "key02"u8.ToArray(), "value02"u8.ToArray() },
@@ -86,6 +88,7 @@ public class TreeWalkerTest
         var result = tree.TrySearch(
             "key03"u8.ToArray(),
             SearchOperator.LowerBound,
+            out _,
             out var pos,
             out var nextPageNumber);
 
@@ -100,6 +103,7 @@ public class TreeWalkerTest
             pageNumber,
             "key03"u8.ToArray(),
             SearchOperator.LowerBound,
+            out _,
             out pos,
             out nextPageNumber);
 
@@ -120,7 +124,7 @@ public class TreeWalkerTest
     public async Task SearchOperator_UpperBound()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key01"u8.ToArray(), "value01"u8.ToArray() },
                 { "key02"u8.ToArray(), "value02"u8.ToArray() },
@@ -145,6 +149,7 @@ public class TreeWalkerTest
         var result = tree.TrySearch(
             "key03"u8.ToArray(),
             SearchOperator.UpperBound,
+            out _,
             out var pos,
             out var nextPageNumber);
 
@@ -159,6 +164,7 @@ public class TreeWalkerTest
             pageNumber,
             "key03"u8.ToArray(),
             SearchOperator.UpperBound,
+            out _,
             out pos,
             out nextPageNumber);
 
@@ -181,7 +187,7 @@ public class TreeWalkerTest
     public async Task Get_SingleLeaf()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii, true)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -202,7 +208,7 @@ public class TreeWalkerTest
     public async Task Get_MultipleNode()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii, true)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -224,7 +230,7 @@ public class TreeWalkerTest
     public async Task GetRange_NotFound()
     {
         var tree = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key1"u8.ToArray(), "value1"u8.ToArray() },
                 { "key2"u8.ToArray(), "value2"u8.ToArray() },
@@ -250,7 +256,7 @@ public class TreeWalkerTest
     public async Task GetRange_StartInclusiveEndInclusive()
     {
         var table = await TestHelper.BuildTreeAsync(
-            new KeyValueList(KeyEncoding.Ascii, true)
+            new UniqueKeyValueList(KeyEncoding.Ascii)
             {
                 { "key01"u8.ToArray(), "value01"u8.ToArray() },
                 { "key02"u8.ToArray(), "value02"u8.ToArray() },
