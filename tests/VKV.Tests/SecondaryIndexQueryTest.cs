@@ -28,7 +28,7 @@ public class SecondaryIndexQueryTest
                 }
             });
 
-        var query = table.WithIndex("category");
+        var query = table.Index("category");
         var result = query.Get("category:key00010");
         Assert.That(result.HasValue, Is.True);
         Assert.That(Encoding.ASCII.GetString(result.Value.Span), Is.EqualTo("value00010"));
@@ -56,7 +56,7 @@ public class SecondaryIndexQueryTest
                 }
             });
 
-        var seconaryIndex = table.WithIndex("category");
+        var seconaryIndex = table.Index("category");
         var result = await seconaryIndex.GetAsync("category:key00010");
         Assert.That(result.HasValue, Is.True);
         Assert.That(Encoding.ASCII.GetString(result.Value.Span), Is.EqualTo("value00010"));
@@ -85,7 +85,7 @@ public class SecondaryIndexQueryTest
                 }
             });
 
-        var query = table.WithIndex("category");
+        var query = table.Index("category");
         var result = query.GetRange(
             "category:key00201"u8,
             "category:key00210"u8);

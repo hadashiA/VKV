@@ -160,5 +160,5 @@ public sealed class ReadOnlyTable : IKeyValueStore
     public RangeIterator CreateIterator(IteratorDirection iteratorDirection = IteratorDirection.Forward) =>
         new(primaryKeyTree, iteratorDirection);
 
-    public IKeyValueStore WithIndex(string indexName) => secondaryIndexQueries[indexName];
+    public IKeyValueStore Index(string indexName) => secondaryIndexQueries[indexName];
 }
