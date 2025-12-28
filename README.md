@@ -18,13 +18,16 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
   - Read a value by primary key 
   - Read values by key range
   - Count by key range
-  - Secondary index (wip)
+  - Secondary index
+    - unique
+    - non-unique
 - Multiple Tables
 - Support for both async and sync
 - C# Serialization
   - MessagePack
+  - (Other formats are under planning.
 - Unity Integration
-  - AsyncReadManager + `NativeArray<byte>` based optimized custom loader.
+  - `AsyncReadManager` + `NativeArray<byte>` based optimized custom loader.
 - Page filter
   - Built-in filters
       - Cysharp/NativeCompression based page compression.
@@ -136,8 +139,51 @@ var count = table.CountRange("key1", "key3");
 using var value1 = await table.GetAsync("key1");
 using var range1 = await table.GetRangeAsync("key1", "key3");
 var count = await table.CountRangeAsync();
-
 ```
+
+### Secondary Index
+
+```cs
+var table1 = builder.CreateTable("items", KeyEncoding.Ascii);
+table1.Append("key1", "value1"u8.ToArray()); // value is any `Memory<byte>` 
+table1.Append("key2", "value2"u8.ToArray());
+table1.Append("key3", "value3"u8.ToArray());
+table1.Append("key4", "value4"u8.ToArray());
+
+// Buiild secondary index (non-unique)
+table1.AddSecondaryIndex("category", isUnique: false, KeyEncoding.Int64LittleEndian, (key, value) =>
+{
+    // This lambda expression defines a factory that generates an index from any value.
+
+    if (key.Span.SequenceEqual("key1") ||
+        key.Span.SequenceEqual("key3"))
+    {
+        return "category1"u8.ToArray();
+    }
+    else
+    {
+        return "category2"u8.ToArray();
+    }
+});
+
+// Build
+await builder.BuildToFileAsync("/path/to/bin.vkv");
+```
+
+```cs
+var table = database.GetTable("items");
+
+// get "category1" values
+table.Index("category").GetAll("category1"u8); //=> "value1", "value3"
+
+// get range 
+table.Index("category").GetRange("category1"u8, "category2"u8);
+
+// async
+await table.Index("category").GetAllAsync("category1"u8.ToArray());
+await table.Index("category").GetRangeAsync(...);
+```
+
 
 ### Range Iterator
 
