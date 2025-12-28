@@ -280,7 +280,7 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        IPageEntry page = default!;
+        IPageEntry page;
 
         int entryIndex;
         // find start position
