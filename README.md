@@ -119,18 +119,17 @@ using var range = table.GetRange(
     
 range.Count //=> 3
 
-// greater than 
-using var range = table.GetRange("key1"u8, KeyRange.Unbound, startKeyExclusive: true);
-
-// greater than or equal to
+// "key1" <=
 using var range = table.GetRange("key1"u8, KeyRange.Unbound);
 
-// less than
+// "key1" <
+using var range = table.GetRange("key1"u8, KeyRange.Unbound, startKeyExclusive: true);
+
+// "key999" >= 
 using var range = table.GetRange(KeyRange.UnBound, "key999");
 
-// less than or equal to
+// "key999" >
 using var range = table.GetRange(KeyRange.UnBound, "key999", endKeyExclusive: true);
-
 
 // count
 var count = table.CountRange("key1", "key3");
@@ -151,7 +150,7 @@ table1.Append("key3", "value3"u8.ToArray());
 table1.Append("key4", "value4"u8.ToArray());
 
 // Buiild secondary index (non-unique)
-table1.AddSecondaryIndex("category", isUnique: false, KeyEncoding.Int64LittleEndian, (key, value) =>
+table1.AddSecondaryIndex("category", isUnique: false, KeyEncoding.Ascii, (key, value) =>
 {
     // This lambda expression defines a factory that generates an index from any value.
 
