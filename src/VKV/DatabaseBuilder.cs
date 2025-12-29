@@ -19,6 +19,8 @@ using static System.Runtime.CompilerServices.MemoryMarshalEx;
 namespace VKV;
 
 public delegate ReadOnlyMemory<byte> SecondaryIndexFactory(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value);
+public delegate T SecondaryIndexFactory<out T>(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value)
+    where T : IComparable<T>;
 
 public abstract class IndexOptions(string name, bool isUnique)
 {
@@ -87,6 +89,24 @@ public class TableBuilder
             KeyEncoding = keyEncoding,
             IndexFactory = indexFactory,
         });
+    }
+
+    public void AddSecondaryIndex<TIndex>(
+        string indexName,
+        bool isUnique,
+        IKeyEncoding keyEncoding,
+        SecondaryIndexFactory<TIndex> indexFactory)
+        where TIndex : IComparable<TIndex>
+    {
+        SecondaryIndexFactory factory = (key, value) =>
+        {
+            var typedIndex = indexFactory(key, value);
+            var length = keyEncoding.GetMaxEncodedByteCount(typedIndex);
+            var buffer = new byte[length];
+            keyEncoding.TryEncode(typedIndex, buffer, out var written);
+            return buffer.AsMemory(0, written);
+        };
+        AddSecondaryIndex(indexName, isUnique, keyEncoding, factory);
     }
 
     public void Append(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> value)
