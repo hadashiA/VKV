@@ -234,7 +234,8 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
 #endif
         ref var ptr = ref Unsafe.Add(
             ref pageReference,
-            sizeof(int) + Unsafe.SizeOf<NodeHeader>() + index * Unsafe.SizeOf<NodeEntryMeta>());
+            Unsafe.SizeOf<PageHeader>() + Unsafe.SizeOf<NodeHeader>() +
+            index * Unsafe.SizeOf<NodeEntryMeta>());
         return Unsafe.ReadUnaligned<NodeEntryMeta>(ref ptr);
     }
 }
