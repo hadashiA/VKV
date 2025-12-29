@@ -95,23 +95,28 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
 
 //     bool TrySearchInt64Simd(ReadOnlySpan<byte> key, out PageNumber childPageNumber)
 //     {
-//         ref var ptr =
+//         if (entry.UserData is not long[] allKeys)
+//         {
+//             allKeys = new long[entryCount];
+//             ref var ptr =
 // #if NETSTANDARD
-//             ref MemoryMarshal.GetReference(page);
+//                 ref MemoryMarshal.GetReference(page);
 // #else
-//             ref pageReference;
+//                 ref pageReference;
 // #endif
 //
-//         Span<long> keys = stackalloc long[entryCount];
-//         for (var i = 0; i < entryCount; i++)
-//         {
-//             var meta = GetMeta(i);
-//             ref Unsafe.Add(ref ptr, meta.PageOffset);
-//             var key = MemoryMarshal.CreateReadOnlySpan(
-//                 ,
-//                 meta.KeyLength);
+//             Span<long> keys = stackalloc long[entryCount];
+//             for (var i = 0; i < entryCount; i++)
+//             {
+//                 var meta = GetMeta(i);
+//                 var keyInt64 = Unsafe.ReadUnaligned<long>(ref Unsafe.Add(ref ptr, meta.PageOffset));
+//                 allKeys[i] = keyInt64;
+//             }
 //
+//             entry.UserData = allKeys;
 //         }
+//
+//         allKeys
 //     }
 
     // for debug purpose
@@ -157,7 +162,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
     {
         ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(page),
+            ref MemoryMarshal.GetReference(page.Memory.Span),
 #else
             ref pageReference,
 #endif

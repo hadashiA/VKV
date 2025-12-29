@@ -50,7 +50,6 @@ public class PageEntry
 
     internal QueueTag Tag { get; set; }
     internal int Frequency;
-    internal object UserData;
 
     int refCount;
 
