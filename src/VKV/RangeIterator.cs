@@ -26,7 +26,7 @@ public class RangeIterator :
 
     // iterator state
     readonly TreeWalker treeWalker;
-    IPageEntry? currentPage;
+    PageEntry? currentPage;
     int currentNodeEntryCount = -1;
     ushort currentEntryIndex;
     int currentValueOffset;

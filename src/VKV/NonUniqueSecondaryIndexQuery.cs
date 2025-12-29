@@ -78,7 +78,7 @@ public class NonUniqueSecondaryIndexQuery : IKeyValueStore
         foreach (var x in valueRefs)
         {
             var pageRef = PageRef.Parse(x.Span);
-            IPageEntry page;
+            PageEntry page;
             while (!duplicateKeyTree.PageCache.TryGet(pageRef.PageNumber, out page))
             {
                 duplicateKeyTree.PageCache.Load(pageRef.PageNumber);
@@ -135,7 +135,7 @@ public class NonUniqueSecondaryIndexQuery : IKeyValueStore
         foreach (var x in valueRefs)
         {
             var pageRef = PageRef.Parse(x.Span);
-            IPageEntry page;
+            PageEntry page;
             while (!duplicateKeyTree.PageCache.TryGet(pageRef.PageNumber, out page))
             {
                 await duplicateKeyTree.PageCache.LoadAsync(pageRef.PageNumber, cancellationToken);

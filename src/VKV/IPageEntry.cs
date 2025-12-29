@@ -1,12 +1,14 @@
 using System;
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace VKV;
 
-public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDisposable
+public readonly struct PageSlice(PageEntry entry, int start, int length) : IDisposable
 {
-    public IPageEntry Page => entry;
+    public PageEntry Page => entry;
     public int Start => start;
     public int Length => length;
 
@@ -28,15 +30,66 @@ public readonly struct PageSlice(IPageEntry entry, int start, int length) : IDis
     }
 }
 
-public interface IPageEntry
+enum QueueTag : byte
 {
-    public PageNumber PageNumber { get; }
-    public ReadOnlyMemory<byte> Memory { get; }
-    public void Release();
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int GetLength() => Unsafe.ReadUnaligned<int>(ref GetReference());
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref byte GetReference() => ref MemoryMarshal.GetReference(Memory.Span);
+    None,
+    S,
+    M
 }
+
+public class PageEntry
+{
+    public PageNumber PageNumber { get; init; }
+    public IMemoryOwner<byte>? Buffer { get; init; }
+
+    public int RefCount
+    {
+        get => refCount;
+        init => refCount = value;
+    }
+
+    internal QueueTag Tag { get; set; }
+    internal int Frequency;
+    internal object UserData;
+
+    int refCount;
+
+    public ReadOnlyMemory<byte> Memory
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Buffer!.Memory;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Retain()
+    {
+        Interlocked.Increment(ref refCount);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryRetainIfAlive()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref refCount);
+            if (current <= 0)
+                return false;
+
+            var next = current + 1;
+
+            int original = Interlocked.CompareExchange(ref refCount, next, current);
+            if (original == current)
+                return true;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Release()
+    {
+        if (Interlocked.Decrement(ref refCount) == 0)
+        {
+            Buffer?.Dispose();
+        }
+    }
+}
+

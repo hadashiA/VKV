@@ -87,7 +87,7 @@ class TreeWalker
         ValidateRange(startKey, endKey);
 
         int entryIndex;
-        IPageEntry page = default!;
+        PageEntry page = default!;
 
         // find start position
         if (startKey.IsEmpty)
@@ -185,7 +185,7 @@ class TreeWalker
         ValidateRange(startKey, endKey);
 
         int entryIndex;
-        IPageEntry page = default!;
+        PageEntry page = default!;
 
         // find start position
         if (startKey.IsEmpty)
@@ -280,7 +280,7 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        IPageEntry page;
+        PageEntry page;
 
         int entryIndex;
         // find start position
@@ -380,7 +380,7 @@ class TreeWalker
         ValidateRange(startKey, endKey);
 
         int entryIndex;
-        IPageEntry page = default!;
+        PageEntry page = default!;
 
         // find start position
         if (startKey.IsEmpty)
@@ -531,7 +531,7 @@ class TreeWalker
     internal bool TrySearch(
         scoped ReadOnlySpan<byte> key,
         SearchOperator op,
-        out IPageEntry page,
+        out PageEntry page,
         out int index,
         out PageNumber? nextPageNumber) =>
         TrySearch(RootPageNumber, key, op, out page, out index, out nextPageNumber);
@@ -540,7 +540,7 @@ class TreeWalker
         PageNumber from,
         scoped ReadOnlySpan<byte> key,
         SearchOperator op,
-        out IPageEntry page,
+        out PageEntry page,
         out int index,
         out PageNumber? nextPageNumber)
     {
@@ -591,7 +591,7 @@ class TreeWalker
         var pageNumber = RootPageNumber;
         while (true)
         {
-            IPageEntry page;
+            PageEntry page;
             while (!PageCache.TryGet(pageNumber, out page))
             {
                 PageCache.Load(pageNumber);
@@ -630,7 +630,7 @@ class TreeWalker
         var pageNumber = RootPageNumber;
         while (true)
         {
-            IPageEntry page;
+            PageEntry page;
             while (!PageCache.TryGet(pageNumber, out page))
             {
                 PageCache.Load(pageNumber);

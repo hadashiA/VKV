@@ -27,7 +27,7 @@ public class SecondaryIndexQuery : IKeyValueStore
 
         var pageRef = PageRef.Parse(result.Value.Span);
 
-        IPageEntry page;
+        PageEntry page;
         while (!tree.PageCache.TryGet(pageRef.PageNumber, out page))
         {
             tree.PageCache.Load(pageRef.PageNumber);
@@ -49,7 +49,7 @@ public class SecondaryIndexQuery : IKeyValueStore
 
         var pageRef = PageRef.Parse(result.Value.Span);
 
-        IPageEntry page;
+        PageEntry page;
         while (!tree.PageCache.TryGet(pageRef.PageNumber, out page))
         {
             await tree.PageCache.LoadAsync(pageRef.PageNumber, cancellationToken);
@@ -76,7 +76,7 @@ public class SecondaryIndexQuery : IKeyValueStore
         foreach (var x in pageRefs)
         {
             var pageRef = PageRef.Parse(x.Span);
-            IPageEntry page;
+            PageEntry page;
             while (!tree.PageCache.TryGet(pageRef.PageNumber, out page))
             {
                 tree.PageCache.Load(pageRef.PageNumber);
@@ -105,7 +105,7 @@ public class SecondaryIndexQuery : IKeyValueStore
         foreach (var x in pageRefs)
         {
             var pageRef = PageRef.Parse(x.Span);
-            IPageEntry page;
+            PageEntry page;
             while (!tree.PageCache.TryGet(pageRef.PageNumber, out page))
             {
                 await tree.PageCache.LoadAsync(pageRef.PageNumber, cancellationToken);

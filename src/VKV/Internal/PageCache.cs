@@ -12,67 +12,12 @@ namespace VKV.Internal;
 /// </summary>
 public sealed class PageCache : IDisposable
 {
-    enum QueueTag : byte
-    {
-        None,
-        S,
-        M
-    }
-
-    class Entry : IPageEntry
-    {
-        public required PageNumber PageNumber { get; init; }
-        public required IMemoryOwner<byte>? Buffer { get; init; }
-        public QueueTag Tag { get; set; }
-
-        public int RefCount;
-        public int Frequency;
-
-        public ReadOnlyMemory<byte> Memory
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => Buffer!.Memory;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Retain()
-        {
-            Interlocked.Increment(ref RefCount);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TryRetainIfAlive()
-        {
-            while (true)
-            {
-                var current = Volatile.Read(ref RefCount);
-                if (current <= 0)
-                    return false;
-
-                var next = current + 1;
-
-                int original = Interlocked.CompareExchange(ref RefCount, next, current);
-                if (original == current)
-                    return true;
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Release()
-        {
-            if (Interlocked.Decrement(ref RefCount) == 0)
-            {
-                Buffer?.Dispose();
-            }
-        }
-    }
-
     // readonly ConcurrentDictionary<PageNumber, Entry> entries = new();
-    readonly ConcurrentDictionary<PageNumber, Entry> map;
+    readonly ConcurrentDictionary<PageNumber, PageEntry> map;
     readonly ConcurrentDictionary<PageNumber, byte> ghost;
 
-    readonly MpscRingQueue<Entry> sQueue;
-    readonly MpscRingQueue<Entry> mQueue;
+    readonly MpscRingQueue<PageEntry> sQueue;
+    readonly MpscRingQueue<PageEntry> mQueue;
 
     readonly IPageLoader pageLoader;
     readonly int capacity;
@@ -99,7 +44,7 @@ public sealed class PageCache : IDisposable
         sTargetSize = Math.Max(2, (int)(capacity * smallFraction));
         mTargetSize = capacity - sTargetSize;
 
-        map = new ConcurrentDictionary<PageNumber, Entry>(
+        map = new ConcurrentDictionary<PageNumber, PageEntry>(
             Environment.ProcessorCount,
             capacity);
 
@@ -110,8 +55,8 @@ public sealed class PageCache : IDisposable
         var fifoCap = 1;
         while (fifoCap < capacity) fifoCap <<= 1;
 
-        sQueue = new MpscRingQueue<Entry>(fifoCap);
-        mQueue = new MpscRingQueue<Entry>(fifoCap);
+        sQueue = new MpscRingQueue<PageEntry>(fifoCap);
+        mQueue = new MpscRingQueue<PageEntry>(fifoCap);
     }
 
     public void Dispose()
@@ -128,7 +73,7 @@ public sealed class PageCache : IDisposable
         }
     }
 
-    public bool TryGet(PageNumber pageNumber, out IPageEntry page)
+    public bool TryGet(PageNumber pageNumber, out PageEntry page)
     {
         if (map.TryGetValue(pageNumber, out var entry))
         {
@@ -170,7 +115,7 @@ public sealed class PageCache : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void AddEntry(PageNumber pageNumber, IMemoryOwner<byte> buffer)
     {
-        var entry = new Entry
+        var entry = new PageEntry
         {
             PageNumber = pageNumber,
             Buffer = buffer,

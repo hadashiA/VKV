@@ -13,11 +13,11 @@ enum NodeKind
 static class NodeHeaderExtensions
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static NodeHeader GetNodeHeader(this IPageEntry page) =>
+    public static NodeHeader GetNodeHeader(this PageEntry page) =>
         NodeHeader.Parse(page.Memory.Span);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int GetEntryCount(this IPageEntry page) =>
+    public static int GetEntryCount(this PageEntry page) =>
         NodeHeader.ParseEntryCount(page.Memory.Span);
 }
 

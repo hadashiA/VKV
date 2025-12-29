@@ -93,6 +93,27 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
         return true;
     }
 
+//     bool TrySearchInt64Simd(ReadOnlySpan<byte> key, out PageNumber childPageNumber)
+//     {
+//         ref var ptr =
+// #if NETSTANDARD
+//             ref MemoryMarshal.GetReference(page);
+// #else
+//             ref pageReference;
+// #endif
+//
+//         Span<long> keys = stackalloc long[entryCount];
+//         for (var i = 0; i < entryCount; i++)
+//         {
+//             var meta = GetMeta(i);
+//             ref Unsafe.Add(ref ptr, meta.PageOffset);
+//             var key = MemoryMarshal.CreateReadOnlySpan(
+//                 ,
+//                 meta.KeyLength);
+//
+//         }
+//     }
+
     // for debug purpose
     public KeyValuePair<Memory<byte>, long>[] ToArray()
     {

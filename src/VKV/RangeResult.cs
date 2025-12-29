@@ -25,9 +25,9 @@ public class RangeResult : IDisposable, IEnumerable<ReadOnlyMemory<byte>>
     public ReadOnlyMemory<byte> this[int i] => list[i];
 
     readonly List<ReadOnlyMemory<byte>> list = [];
-    readonly List<IPageEntry> referencePages = [];
+    readonly List<PageEntry> referencePages = [];
 
-    internal void Add(IPageEntry page, int start, int length)
+    internal void Add(PageEntry page, int start, int length)
     {
         list.Add(page.Memory.Slice(start, length));
         referencePages.Add(page);
