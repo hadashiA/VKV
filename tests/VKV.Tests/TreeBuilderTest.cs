@@ -59,18 +59,20 @@ public class TreeBuilderTest
 
         var header = NodeHeader.Parse(result.AsSpan((int)buildResult.RootPageNumber.Value));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Internal));
-        Assert.That(header.EntryCount, Is.EqualTo(2));
+        Assert.That(header.EntryCount, Is.EqualTo(3));
 
         var internalNode = new InternalNodeReader(result.AsSpan((int)buildResult.RootPageNumber.Value), header.EntryCount);
         internalNode.GetAt(0, out var internalKey1, out var childPosition1);
         internalNode.GetAt(1, out var internalKey2, out var childPosition2);
+        internalNode.GetAt(2, out var internalKey3, out var childPosition3);
 
         Assert.That(internalKey1.SequenceEqual("key01"u8), Is.True);
-        Assert.That(internalKey2.SequenceEqual("key06"u8), Is.True);
+        Assert.That(internalKey2.SequenceEqual("key05"u8), Is.True);
+        Assert.That(internalKey3.SequenceEqual("key10"u8), Is.True);
 
         header = NodeHeader.Parse(result.AsSpan((int)childPosition1.Value));
         Assert.That(header.Kind, Is.EqualTo(NodeKind.Leaf));
-        Assert.That(header.EntryCount, Is.EqualTo(5));
+        Assert.That(header.EntryCount, Is.EqualTo(4));
         Assert.That(header.LeftSiblingPageNumber.IsEmpty, Is.True);
         // Assert.That(header.RightSiblingPosition, Is.EqualTo());
 
