@@ -18,8 +18,7 @@ public class NonUniqueSecondaryIndexQueryTest
                 builder.AddSecondaryIndex("category", false, KeyEncoding.Ascii,
                     (key, value) =>
                     {
-                        var category = $"category:{(index++ / 10):D3}";
-                        return Encoding.ASCII.GetBytes(category);
+                        return $"category:{index++ / 10:D3}";
                     });
 
                 for (var i = 0; i < 1000; i++)

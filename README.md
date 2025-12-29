@@ -157,11 +157,11 @@ table1.AddSecondaryIndex("category", isUnique: false, KeyEncoding.Ascii, (key, v
     if (key.Span.SequenceEqual("key1") ||
         key.Span.SequenceEqual("key3"))
     {
-        return "category1"u8.ToArray();
+        return "category1";
     }
     else
     {
-        return "category2"u8.ToArray();
+        return "category2";
     }
 });
 
@@ -262,6 +262,12 @@ var tableBuilder = builder.CreateTable("items", KeyEncoding.Ascii)
 // Add MessagePack serialized values...
 var tableBuilder.Append("key01", new Person { Name = "Bob", Age = 22 });
 var tableBuilder.Append("key02", new Person { Name = "Tom", Age = 34 });
+
+// Secondary index example
+tableBuilder.AddSecondaryIndex("age", false, KeyEncoding.Int64LittleEndian, (key, person) =>
+{
+    return person.Age;
+});
 
 await builder.BuildToFileAsync("/path/to/db.vkv");
 ```
