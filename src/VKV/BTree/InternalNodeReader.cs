@@ -32,14 +32,11 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void GetAt(int index, out ReadOnlySpan<byte> key, out PageNumber childPageNumber)
     {
-        var meta = GetMeta(index);
-        ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(page),
-#else
-            ref pageReference,
+        ref var pageReference = ref MemoryMarshal.GetReference(page);
 #endif
-            meta.PageOffset);
+        var meta = GetMeta(index);
+        ref var ptr = ref Unsafe.Add(ref pageReference, meta.PageOffset);
 
         key = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
         ptr = ref Unsafe.Add(ref ptr, meta.KeyLength);
@@ -50,6 +47,9 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
 
     public bool TrySearch(ReadOnlySpan<byte> key, IKeyEncoding keyEncoding, out PageNumber childPageNumber)
     {
+#if NETSTANDARD
+        ref var pageReference = ref MemoryMarshal.GetReference(page);
+#endif
         var min = 0;
         var max = entryCount;
 
@@ -59,13 +59,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
             var mid = min + ((max - min) >> 1);
 
             meta = GetMeta(mid);
-            ref var ptr = ref Unsafe.Add(
-#if NETSTANDARD
-                ref MemoryMarshal.GetReference(page),
-#else
-                ref pageReference,
-#endif
-                meta.PageOffset);
+            ref var ptr = ref Unsafe.Add(ref pageReference, meta.PageOffset);
 
             var midKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
             var cmp = keyEncoding.Compare(midKey, key);
@@ -81,14 +75,7 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
 
         var index = min == 0 ? 0 : min - 1;
         meta = GetMeta(index);
-        ref var p = ref Unsafe.Add(
-#if NETSTANDARD
-            ref MemoryMarshal.GetReference(page),
-#else
-            ref pageReference,
-#endif
-            meta.PageOffset +  meta.KeyLength);
-
+        ref var p = ref Unsafe.Add(ref pageReference, meta.PageOffset +  meta.KeyLength);
         childPageNumber = new PageNumber(Unsafe.ReadUnaligned<long>(ref p));
         return true;
     }
@@ -96,11 +83,8 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
     // for debug purpose
     public KeyValuePair<Memory<byte>, long>[] ToArray()
     {
-        ref var ptr =
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(page);
-#else
-            ref pageReference;
+        ref var pageReference= ref MemoryMarshal.GetReference(page);
 #endif
 
         var list = new List<KeyValuePair<Memory<byte>, long>>(entryCount);
@@ -109,11 +93,11 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
             var meta = GetMeta(i);
 
             var key = MemoryMarshal.CreateReadOnlySpan(
-                ref Unsafe.Add(ref ptr, meta.PageOffset),
+                ref Unsafe.Add(ref pageReference, meta.PageOffset),
                 meta.KeyLength);
 
             var childPosition = Unsafe.ReadUnaligned<long>(
-                ref Unsafe.Add(ref ptr, meta.PageOffset + meta.KeyLength));
+                ref Unsafe.Add(ref pageReference, meta.PageOffset + meta.KeyLength));
 
             list.Add(new KeyValuePair<Memory<byte>, long>(key.ToArray(), childPosition));
         }
@@ -134,12 +118,11 @@ readonly ref struct InternalNodeReader(ReadOnlySpan<byte> page, int entryCount)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     NodeEntryMeta GetMeta(int index)
     {
-        ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(page),
-#else
-            ref pageReference,
+        ref var pageReference = ref MemoryMarshal.GetReference(page);
 #endif
+        ref var ptr = ref Unsafe.Add(
+            ref pageReference,
             sizeof(int) + Unsafe.SizeOf<NodeHeader>() + index * Unsafe.SizeOf<NodeEntryMeta>());
         return Unsafe.ReadUnaligned<NodeEntryMeta>(ref ptr);
     }

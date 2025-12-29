@@ -89,6 +89,10 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
         IKeyEncoding keyEncoding,
         out int index)
     {
+#if  NETSTANDARD
+        ref var pageReference = ref MemoryMarshal.GetReference(page);
+#endif
+
         var min = 0;
         var max = entryCount;
         var resultIndex = -1;
@@ -98,14 +102,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
             var midIndex = min + ((max - min) >> 1);
             var midMeta = GetMeta(midIndex);
 
-            ref var ptr = ref Unsafe.Add(
-#if  NETSTANDARD
-                ref MemoryMarshal.GetReference(page),
-#else
-                ref pageReference,
-#endif
-                midMeta.PageOffset);
-
+            ref var ptr = ref Unsafe.Add(ref pageReference, midMeta.PageOffset);
             var midKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, midMeta.KeyLength);
 
             var compared = keyEncoding.Compare(midKey, key);
@@ -166,13 +163,7 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
                 if (min < max)
                 {
                     var meta = GetMeta(min);
-                    ref var ptr = ref Unsafe.Add(
-#if NETSTANDARD
-                        ref MemoryMarshal.GetReference(page),
-#else
-                        ref pageReference,
-#endif
-                        meta.PageOffset);
+                    ref var ptr = ref Unsafe.Add(ref pageReference, meta.PageOffset);
                     var foundKey = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
                     if (keyEncoding.Compare(foundKey, key) == 0)
                     {
@@ -202,11 +193,8 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
     // for debug purpose
     public KeyValuePair<Memory<byte>, Memory<byte>>[] ToArray()
     {
-        ref var ptr =
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(page);
-#else
-            ref pageReference;
+        ref var pageReference = ref MemoryMarshal.GetReference(page);
 #endif
 
         var list = new List<KeyValuePair<Memory<byte>, Memory<byte>>>(entryCount);
@@ -215,11 +203,11 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
             var meta = GetMeta(i);
 
             var key = MemoryMarshal.CreateReadOnlySpan(
-                ref Unsafe.Add(ref ptr, meta.PageOffset),
+                ref Unsafe.Add(ref pageReference, meta.PageOffset),
                 meta.KeyLength);
 
             var value = MemoryMarshal.CreateReadOnlySpan(
-                ref Unsafe.Add(ref ptr, meta.PageOffset + meta.KeyLength),
+                ref Unsafe.Add(ref pageReference, meta.PageOffset + meta.KeyLength),
                 meta.ValueLength);
 
             list.Add(new KeyValuePair<Memory<byte>, Memory<byte>>(key.ToArray(), value.ToArray()));
@@ -241,12 +229,11 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     NodeEntryMeta GetMeta(int index)
     {
-        ref var ptr = ref Unsafe.Add(
 #if NETSTANDARD
-            ref MemoryMarshal.GetReference(page),
-#else
-                ref pageReference,
+        ref var pageReference = ref MemoryMarshal.GetReference(page);
 #endif
+        ref var ptr = ref Unsafe.Add(
+            ref pageReference,
             sizeof(int) + Unsafe.SizeOf<NodeHeader>() + index * Unsafe.SizeOf<NodeEntryMeta>());
         return Unsafe.ReadUnaligned<NodeEntryMeta>(ref ptr);
     }
