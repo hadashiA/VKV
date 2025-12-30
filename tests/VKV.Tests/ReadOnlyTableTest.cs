@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using VKV.Compression;
+using VKV.UlidKey;
 
 namespace VKV.Tests;
 
@@ -74,6 +76,33 @@ public class ReadOnlyTableTest
 
         using var result2 = await table.GetAsync(999L);
         Assert.That(result2.HasValue, Is.False);
+    }
+
+    [Test]
+    public async Task Get_UlidKey()
+    {
+        var keys = new List<Ulid>();
+
+        var table = await TestHelper.BuildTableAsync(
+            UlidKeyEncoding.Instance,
+            databaseConfigure: builder => builder.PageSize = 128,
+            tableConfigure: builder =>
+            {
+                for (var i = 0; i < 100; i++)
+                {
+                    var key = Ulid.NewUlid();
+                    builder.Append(key, Encoding.ASCII.GetBytes($"value{i:D3}"));
+                    keys.Add(key);
+                }
+            });
+
+        using var result1 = await table.GetAsync(keys[50]);
+        Assert.That(result1.HasValue, Is.True);
+        Assert.That(result1.Value.Span.SequenceEqual("value050"u8), Is.True);
+
+        using var result2 = await table.GetAsync(Ulid.NewUlid());
+        Assert.That(result2.HasValue, Is.False);
+
     }
 
     [Test]

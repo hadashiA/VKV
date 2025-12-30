@@ -191,3 +191,4 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
         return Compare(x.Span, y.Span);
     }
 }
+
