@@ -35,7 +35,10 @@ public class UlidKeyEncoding : IKeyEncoding
             bytesWritten = 16;
             return ulid.TryWriteBytes(destination);
         }
-        throw new KeyEncodingMismatchException($"Key {key} is not a Ulid");
+
+        KeyEncodingMismatchException.Throw(typeof(TKey), "UlidKeyEncoding");
+        bytesWritten = default;
+        return false;
     }
 
     public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
@@ -45,7 +48,6 @@ public class UlidKeyEncoding : IKeyEncoding
             bytesWritten = 16;
             return ulid.TryWriteBytes(destination);
         }
-        bytesWritten = default;
-        return false;
+        throw new KeyEncodingMismatchException($"Cannot parse Ulid: {formattedString}");
     }
 }
