@@ -6,6 +6,7 @@
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <RootNamespace>VKV.Tests</RootNamespace>
+        <ImplicitUsings>disable</ImplicitUsings>
     </PropertyGroup>
 
     <ItemGroup>
@@ -23,6 +24,7 @@
     <ItemGroup>
       <ProjectReference Include="..\..\src\VKV.Compression\VKV.Compression.csproj" />
       <ProjectReference Include="..\..\src\VKV.MessagePack\VKV.MessagePack.csproj" />
+      <ProjectReference Include="..\..\src\VKV.UlidKey\VKV.UlidKey.csproj" />
       <ProjectReference Include="..\..\src\VKV\VKV.csproj" />
     </ItemGroup>
 

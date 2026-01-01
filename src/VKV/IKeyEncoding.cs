@@ -9,6 +9,9 @@ namespace VKV;
 
 public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
 {
+    /// <summary>
+    /// A string that uniquely identifies the encoding method. It is embedded in the binary.
+    /// </summary>
     string Id { get; }
 
     int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b);
@@ -16,6 +19,15 @@ public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
     int GetMaxEncodedByteCount<TKey>(TKey key)
         where TKey : IComparable<TKey>;
 
+    /// <summary>
+    /// Encodes any type to a byte array held by the DB
+    /// </summary>
+    /// <exception cref="KeyEncodingMismatchException">
+    /// If TKey is an unsupported type
+    /// </exception>
+    /// <returns>
+    ///  false if the destination length is insufficient.
+    /// </returns>
     bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
         where TKey : IComparable<TKey>;
 
@@ -26,6 +38,9 @@ public static class KeyEncoding
 {
     public static Int64LittleEndianEncoding Int64LittleEndian => Int64LittleEndianEncoding.Instance;
     public static AsciiOrdinalEncoding Ascii => AsciiOrdinalEncoding.Instance;
+#if NET9_0_OR_GREATER
+    public static Uuidv7KeyEncoding Uuidv7 => Uuidv7KeyEncoding.Instance;
+#endif
 
     static readonly ConcurrentDictionary<string, IKeyEncoding> registry = new();
 
@@ -35,6 +50,9 @@ public static class KeyEncoding
         {
             "i64" => Int64LittleEndianEncoding.Instance,
             "ascii" => AsciiOrdinalEncoding.Instance,
+#if NET9_0_OR_GREATER
+            "uuidv7" => Uuidv7KeyEncoding.Instance,
+#endif
             _ => registry[id]
         };
     }
@@ -90,7 +108,7 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
                 longKey = u16;
                 break;
             default:
-                KeyEncodingMismatchException.ThrowCannotEncodeInt64(typeof(TKey));
+                KeyEncodingMismatchException.Throw(typeof(TKey), "int64");
                 break;
         }
 
@@ -106,8 +124,7 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
             Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), longValue);
             bytesWritten = sizeof(long);
         }
-        bytesWritten = default;
-        return false;
+        throw new KeyEncodingMismatchException($"Cannot convert to int64: {formattedString}");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -125,14 +142,10 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
 
     public string Id => "ascii";
 
-    public bool IsSupportedType(Type type) => type == typeof(string);
-
-    public void ThrowIfNotSupportedType(Type type)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y)
     {
-        if (type != typeof(string))
-        {
-            throw new KeyEncodingMismatchException($"Cannot convert as string from {type}");
-        }
+        return Compare(x.Span, y.Span);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -150,21 +163,26 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
     public bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten)
         where TKey : IComparable<TKey>
     {
-        var stringKey = Unsafe.As<TKey, string>(ref key);
+        if (key is string keyString)
+        {
 #if NET8_0_OR_GREATER
-        return Encoding.ASCII.TryGetBytes(stringKey, destination, out bytesWritten);
+            return Encoding.ASCII.TryGetBytes(keyString, destination, out bytesWritten);
 #else
-        try
-        {
-            bytesWritten = Encoding.ASCII.GetBytes(stringKey, destination);
-            return true;
-        }
-        catch (ArgumentException ex)
-        {
-            bytesWritten = 0;
-            return false;
-        }
+            try
+            {
+                bytesWritten = Encoding.ASCII.GetBytes(keyString, destination);
+                return true;
+            }
+            catch (ArgumentException ex)
+            {
+                bytesWritten = 0;
+                return false;
+            }
 #endif
+        }
+        KeyEncodingMismatchException.Throw(typeof(TKey), "string");
+        bytesWritten = default;
+        return default;
     }
 
     public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
@@ -184,10 +202,54 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
         }
 #endif
     }
+}
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#if NET9_0_OR_GREATER
+public sealed class Uuidv7KeyEncoding : IKeyEncoding
+{
+    public static readonly Uuidv7KeyEncoding Instance = new();
+
+    public string Id => "uuidv7";
+
     public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y)
     {
         return Compare(x.Span, y.Span);
     }
+
+    public int Compare(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
+    {
+        var aId = new Guid(a);
+        var bId = new Guid(b);
+        return aId.CompareTo(bId);
+    }
+
+    public int GetMaxEncodedByteCount<TKey>(TKey key) where TKey : IComparable<TKey> => 16;
+
+    public bool TryEncode<TKey>(TKey key, Span<byte> destination, out int bytesWritten) where TKey : IComparable<TKey>
+    {
+        if (key is Guid { Version: 7 } keyGuid)
+        {
+            if (destination.Length >= 16)
+            {
+                bytesWritten = 16;
+                return keyGuid.TryWriteBytes(destination);
+            }
+            bytesWritten = default;
+            return false;
+        }
+        KeyEncodingMismatchException.Throw(typeof(TKey), "uuidv7");
+        bytesWritten = default;
+        return false;
+    }
+
+    public bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten)
+    {
+        if (Guid.TryParse(formattedString, out var guid))
+        {
+            bytesWritten = 16;
+            return guid.TryWriteBytes(destination);
+        }
+        throw new KeyEncodingMismatchException($"Cannot convert to uuidv7: {formattedString}");
+    }
 }
+#endif
