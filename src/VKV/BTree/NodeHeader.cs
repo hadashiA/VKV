@@ -55,7 +55,7 @@ unsafe struct NodeHeader
     public static NodeHeader Parse(ReadOnlySpan<byte> page)
     {
         return Unsafe.ReadUnaligned<NodeHeader>(
-            ref Unsafe.Add(ref MemoryMarshal.GetReference(page), sizeof(int)));
+            ref Unsafe.Add(ref MemoryMarshal.GetReference(page), Unsafe.SizeOf<PageHeader>()));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using VKV.Internal;
@@ -87,7 +88,7 @@ class TreeWalker
         ValidateRange(startKey, endKey);
 
         int entryIndex;
-        IPageEntry page = default!;
+        IPageEntry page;
 
         // find start position
         if (startKey.IsEmpty)
@@ -134,22 +135,21 @@ class TreeWalker
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
                 while (entryIndex < header.EntryCount)
                 {
-                    leafNode.GetAt(
-                        entryIndex,
-                        out var key,
-                        out var valuePageOffset,
-                        out var valueLength);
+                    leafNode.GetAt(entryIndex, out var pageOffset, out var keyLength, out var valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
+                        var key = MemoryMarshal.CreateReadOnlySpan(
+                            ref Unsafe.Add(ref MemoryMarshal.GetReference(pageSpan), pageOffset),
+                            keyLength);
                         var compared = KeyEncoding.Compare(key, endKey);
                         if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
                             return result;
                         }
                     }
-                    result.Add(page, valuePageOffset, valueLength);
+                    result.Add(page, pageOffset + keyLength, valueLength);
                     entryIndex++;
                     retain = true;
                 }
@@ -185,7 +185,7 @@ class TreeWalker
         ValidateRange(startKey, endKey);
 
         int entryIndex;
-        IPageEntry page = default!;
+        IPageEntry page;
 
         // find start position
         if (startKey.IsEmpty)
@@ -233,20 +233,26 @@ class TreeWalker
                 {
                     leafNode.GetAt(
                         entryIndex,
-                        out var key,
-                        out var valuePageOffset,
+                        out var pageOffset,
+                        out var keyLength,
                         out var valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
+                        var key = MemoryMarshal.CreateReadOnlySpan(
+                            ref Unsafe.Add(
+                                ref MemoryMarshal.GetReference(pageSpan),
+                                pageOffset),
+                            keyLength);
+
                         var compared = KeyEncoding.Compare(key, endKey.Span);
                         if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
                             return result;
                         }
                     }
-                    result.Add(page, valuePageOffset, valueLength);
+                    result.Add(page, pageOffset + keyLength, valueLength);
 
                     entryIndex++;
                     retain = true;
@@ -332,13 +338,16 @@ class TreeWalker
                 {
                     leafNode.GetAt(
                         entryIndex,
-                        out var key,
-                        out var valuePageOffset,
+                        out var pageOffset,
+                        out var keyLength,
                         out var valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
+                        var key = MemoryMarshal.CreateReadOnlySpan(
+                            ref Unsafe.Add(ref MemoryMarshal.GetReference(pageSpan), pageOffset),
+                            keyLength);
                         var compared = KeyEncoding.Compare(key, endKey);
                         if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
@@ -380,7 +389,7 @@ class TreeWalker
         ValidateRange(startKey, endKey);
 
         int entryIndex;
-        IPageEntry page = default!;
+        IPageEntry page;
 
         // find start position
         if (startKey.IsEmpty)
@@ -431,13 +440,16 @@ class TreeWalker
                 {
                     leafNode.GetAt(
                         entryIndex,
-                        out var key,
-                        out var valuePageOffset,
+                        out var pageOffset,
+                        out var keyLength,
                         out var valueLength);
 
                     // check end key
                     if (!endKey.IsEmpty)
                     {
+                        var key = MemoryMarshal.CreateReadOnlySpan(
+                            ref Unsafe.Add(ref MemoryMarshal.GetReference(pageSpan), pageOffset),
+                            keyLength);
                         var compared = KeyEncoding.Compare(key, endKey.Span);
                         if (compared > 0 || (endKeyExclusive && compared == 0))
                         {
@@ -469,17 +481,10 @@ class TreeWalker
         }
     }
 
-    internal bool TryFind(
-        scoped ReadOnlySpan<byte> key,
-        out ushort entryIndex,
-        out PageSlice value,
-        out PageNumber? next) =>
-        TryFindFrom(RootPageNumber, key, out entryIndex, out value, out next);
-
     internal bool TryFindFrom(
         PageNumber from,
         scoped ReadOnlySpan<byte> key,
-        out ushort entryIndex,
+        out int entryIndex,
         out PageSlice value,
         out PageNumber? next)
     {
@@ -515,7 +520,7 @@ class TreeWalker
                 next = null;
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                if (leafNode.TryFindValue(key, KeyEncoding, out var valueOffset, out var valueLength, out entryIndex))
+                if (leafNode.TryFindValue(key, KeyEncoding, out entryIndex, out var valueOffset, out var valueLength))
                 {
                     value = new PageSlice(page, valueOffset, valueLength);
                     return true;
@@ -618,8 +623,8 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                leafNode.GetAt(0, out _, out var valuePageOffset, out var valueLength);
-                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
+                leafNode.GetAt(0, out var pageOffset, out var keyLength, out var valueLength);
+                var pageSlice = new PageSlice(page, pageOffset + keyLength, valueLength);
                 return new SingleValueResult(pageSlice, true);
             }
         }
@@ -657,8 +662,8 @@ class TreeWalker
                 }
 
                 var leafNode = new LeafNodeReader(pageSpan, header.EntryCount);
-                leafNode.GetAt(header.EntryCount - 1, out _, out var valuePageOffset, out var valueLength);
-                var pageSlice = new PageSlice(page, valuePageOffset, valueLength);
+                leafNode.GetAt(header.EntryCount - 1, out var pageOffset, out var keyLength, out var valueLength);
+                var pageSlice = new PageSlice(page, pageOffset + keyLength, valueLength);
                 return new SingleValueResult(pageSlice, true);
             }
         }
