@@ -21,16 +21,43 @@ public class RangeIterator :
 {
     object? IEnumerator.Current => Current;
 
-    public ReadOnlyMemory<byte> Current =>
-        currentPage?.Memory.Slice(currentValueOffset, currentValueLength) ?? default;
+    public ReadOnlyMemory<byte> CurrentKey
+    {
+        get
+        {
+            var header = NodeHeader.Parse(currentPage!.Memory.Span);
+            if (header.Kind != NodeKind.Leaf)
+            {
+                throw new InvalidOperationException("Invalid node kind");
+            }
+
+            var reader = new LeafNodeReader(currentPage.Memory.Span, header.EntryCount);
+            reader.GetAt(currentEntryIndex, out var pageOffset, out var keyLength, out _);
+            return currentPage.Memory.Slice(pageOffset, keyLength);
+        }
+    }
+
+    public ReadOnlyMemory<byte> CurrentValue
+    {
+        get
+        {
+            var header = NodeHeader.Parse(currentPage!.Memory.Span);
+            if (header.Kind != NodeKind.Leaf)
+            {
+                throw new InvalidOperationException("Invalid node kind");
+            }
+            var reader = new LeafNodeReader(currentPage.Memory.Span, header.EntryCount);
+            reader.GetAt(currentEntryIndex, out var pageOffset, out var keyLength, out var valueLength);
+            return currentPage.Memory.Slice(pageOffset + keyLength, valueLength);
+        }
+    }
+
+    public ReadOnlyMemory<byte> Current => CurrentValue;
 
     // iterator state
     readonly TreeWalker treeWalker;
     IPageEntry? currentPage;
-    int currentNodeEntryCount = -1;
-    ushort currentEntryIndex;
-    int currentValueOffset;
-    int currentValueLength;
+    int currentEntryIndex;
 
     internal RangeIterator(
         TreeWalker treeWalker,
@@ -75,11 +102,10 @@ public class RangeIterator :
         PageNumber? nextPageNumber = treeWalker.RootPageNumber;
         PageSlice pageSlice;
 
-        ushort entryIndex;
         while (!treeWalker.TryFindFrom(
                    nextPageNumber.Value,
                    key,
-                   out entryIndex,
+                   out currentEntryIndex,
                    out pageSlice,
                    out nextPageNumber))
         {
@@ -91,12 +117,7 @@ public class RangeIterator :
         {
             currentPage?.Release();
             currentPage = pageSlice.Page;
-            currentNodeEntryCount = currentPage.GetEntryCount();
         }
-
-        currentEntryIndex = entryIndex;
-        currentValueOffset = pageSlice.Start;
-        currentValueLength = pageSlice.Length;
         return true;
     }
 
@@ -107,11 +128,10 @@ public class RangeIterator :
         PageNumber? nextPageNumber = treeWalker.RootPageNumber;
         PageSlice pageSlice;
 
-        ushort entryIndex;
         while (!treeWalker.TryFindFrom(
                    nextPageNumber.Value,
                    key.Span,
-                   out entryIndex,
+                   out currentEntryIndex,
                    out pageSlice,
                    out nextPageNumber))
         {
@@ -123,11 +143,7 @@ public class RangeIterator :
         {
             currentPage?.Release();
             currentPage = pageSlice.Page;
-            currentNodeEntryCount = currentPage.GetEntryCount();
         }
-        currentValueOffset = pageSlice.Start;
-        currentValueLength = pageSlice.Length;
-        currentEntryIndex = entryIndex;
         return true;
     }
 
@@ -145,16 +161,14 @@ public class RangeIterator :
             }
 
             currentPage = minimumValue.Value.Page;
-            currentValueOffset = minimumValue.Value.Start;
-            currentValueLength = minimumValue.Value.Length;
-            currentNodeEntryCount = currentPage.GetEntryCount();
+            currentEntryIndex = 0;
             return true;
         }
 
         // tail of node
-        if (currentEntryIndex >= currentNodeEntryCount - 1)
+        var header = currentPage.GetNodeHeader();
+        if (currentEntryIndex >= header.EntryCount - 1)
         {
-            var header = currentPage.GetNodeHeader();
             // check right node exists
             if (header.RightSiblingPageNumber.IsEmpty)
             {
@@ -168,13 +182,12 @@ public class RangeIterator :
             }
 
             header = currentPage.GetNodeHeader();
-            currentNodeEntryCount = header.EntryCount;
             if (header.Kind != NodeKind.Leaf)
             {
                 throw new InvalidOperationException("Invalid node kind");
             }
             currentEntryIndex = 0;
-            if (currentNodeEntryCount < 0)
+            if (header.EntryCount < 0)
             {
                 return false;
             }
@@ -183,12 +196,6 @@ public class RangeIterator :
         {
             currentEntryIndex++;
         }
-
-        var leafNode = new LeafNodeReader(currentPage.Memory.Span, currentNodeEntryCount);
-        leafNode.GetAt(currentEntryIndex,
-            out _,
-            out currentValueOffset,
-            out currentValueLength);
         return true;
     }
 
@@ -206,16 +213,13 @@ public class RangeIterator :
             }
 
             currentPage = minimumValue.Value.Page;
-            currentValueOffset = minimumValue.Value.Start;
-            currentValueLength = minimumValue.Value.Length;
-            currentNodeEntryCount = currentPage.GetEntryCount();
             return true;
         }
 
         // tail of node
-        if (currentEntryIndex >= currentNodeEntryCount - 1)
+        var header = currentPage.GetNodeHeader();
+        if (currentEntryIndex >= header.EntryCount - 1)
         {
-            var header = currentPage.GetNodeHeader();
             // check right node exists
             if (header.RightSiblingPageNumber.IsEmpty)
             {
@@ -229,13 +233,12 @@ public class RangeIterator :
             }
 
             header = currentPage.GetNodeHeader();
-            currentNodeEntryCount = header.EntryCount;
             if (header.Kind != NodeKind.Leaf)
             {
                 throw new InvalidOperationException("Invalid node kind");
             }
             currentEntryIndex = 0;
-            if (currentNodeEntryCount < 0)
+            if (header.EntryCount < 0)
             {
                 return false;
             }
@@ -244,12 +247,6 @@ public class RangeIterator :
         {
             currentEntryIndex++;
         }
-
-        var leafNode = new LeafNodeReader(currentPage.Memory.Span, currentNodeEntryCount);
-        leafNode.GetAt(currentEntryIndex,
-            out _,
-            out currentValueOffset,
-            out currentValueLength);
         return true;
     }
 }

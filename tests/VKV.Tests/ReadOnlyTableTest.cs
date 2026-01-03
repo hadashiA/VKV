@@ -97,6 +97,7 @@ public class ReadOnlyTableTest
             });
 
         using var result1 = await table.GetAsync(keys[50]);
+
         Assert.That(result1.HasValue, Is.True);
         Assert.That(result1.Value.Span.SequenceEqual("value050"u8), Is.True);
 

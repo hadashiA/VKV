@@ -47,39 +47,35 @@ readonly ref struct LeafNodeReader(ReadOnlySpan<byte> page, int entryCount)
             meta.ValueLength);
     }
 
-    public void GetAt(int index, out ReadOnlySpan<byte> key, out int valuePageOffset, out int valueLength)
+    public void GetAt(int index, out int pageOffset, out ushort keyLength, out ushort valueLength)
     {
 #if NETSTANDARD
         ref var pageReference = ref MemoryMarshal.GetReference(page);
 #endif
         var meta = GetMeta(index);
-        ref var ptr = ref Unsafe.Add(ref pageReference, meta.PageOffset);
-        key = MemoryMarshal.CreateReadOnlySpan(ref ptr, meta.KeyLength);
-        ptr = ref Unsafe.Add(ref ptr, meta.KeyLength);
 
-        valuePageOffset = meta.PageOffset + meta.KeyLength;
+        pageOffset = meta.PageOffset;
+        keyLength = meta.KeyLength;
         valueLength = meta.ValueLength;
     }
 
     public bool TryFindValue(
         scoped ReadOnlySpan<byte> key,
         IKeyEncoding keyEncoding,
+        out int index,
         out int valueOffset,
-        out ushort valueLength,
-        out ushort valueIndex)
+        out ushort valueLength)
     {
-        if (TrySearch(key, SearchOperator.Equal, keyEncoding, out var index))
+        if (TrySearch(key, SearchOperator.Equal, keyEncoding, out index))
         {
             var meta = GetMeta(index);
             valueOffset = meta.PageOffset + meta.KeyLength;
             valueLength = meta.ValueLength;
-            valueIndex = (ushort)index;
             return true;
         }
 
         valueOffset = default;
         valueLength = default;
-        valueIndex = default;
         return false;
     }
 
