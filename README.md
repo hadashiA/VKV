@@ -25,9 +25,14 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
 - Support for both async and sync
 - C# Serialization
   - MessagePack
-  - (Other formats are under planning.
+  - (Other formats are under planning.  
 - Unity Integration
   - `AsyncReadManager` + `NativeArray<byte>` based optimized custom loader.
+- Custom key encoding
+  - Simple ascii/u8 byte sequence string (default)
+  - Int64
+  - UUIDv7 (only for .NET 9 or later. Needs `Guid.CreateVersion7()`)
+  - Ulid
 - Page filter
   - Built-in filters
       - Cysharp/NativeCompression based page compression.
@@ -49,7 +54,8 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
 |:----------------|:-------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
 | VKV             | Main package. Embedded key/value store implementation. | [![NuGet](https://img.shields.io/nuget/v/VKV)](https://www.nuget.org/packages/VKV)                         |
 | VKV.MessagePack | Plugin that handles value as MessagePack-Csharp.       | [![NuGet](https://img.shields.io/nuget/v/VKV.MessagePack)](https://www.nuget.org/packages/VKV.MessagePack) |
-| VKV.Compression | Filter for compressing binary data.                    | [![NuGet](https://img.shields.io/nuget/v/VKV.Compression)](https://www.nuget.org/packages/VKV.Compression) | 
+| VKV.Compression | Plugin  for compressing binary data.                    | [![NuGet](https://img.shields.io/nuget/v/VKV.Compression)](https://www.nuget.org/packages/VKV.Compression) | 
+| VKV.Ulid        | Plugin enabling the use of ulid as a key               | [![NuGet](https://img.shields.io/nuget/v/VKV.Ulid)](https://www.nuget.org/packages/VKV.Ulid) | 
 
 ### Unity
 
@@ -109,7 +115,7 @@ result.Span //=> "value1"u8
 // byte sequence key (fatest)
 using var result = table.Get("key1"u8);
 
-// find key range
+// find key range. ("key1" between "key3")
 using var range = table.GetRange(
     startKey: "key1"u8, 
     endKey: "key3"u8,
@@ -195,12 +201,14 @@ If you want to process each row sequentially in a table, you can further suppres
 using var iterator = table.CreateIterator();
 
 // Get current value..
-iterator.Current //=> "value01"u8
+iterator.CurrentKey //=> "key01"u8
+iterator.CurrentValue //=> "value01"u8
 
 // Seach and seek to the specified key position
 iterator.TrySeek("key03"u8);
 
-iterator.Current //=> "value03"u8;
+iterator.CurrentKey //=> "key03"u8;
+iterator.CurrentValue //=> "value03"u8;
 
 // Seek with async
 await iterator.TrySeekAsync("key03");
