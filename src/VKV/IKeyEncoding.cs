@@ -32,6 +32,14 @@ public interface IKeyEncoding : IComparer<ReadOnlyMemory<byte>>
         where TKey : IComparable<TKey>;
 
     bool TryEncode(string formattedString, Span<byte> destination, out int bytesWritten);
+
+    /// <summary>
+    /// Formats a key byte array to a human-readable UTF-8 string.
+    /// </summary>
+    /// <returns>
+    /// false if the destination length is insufficient.
+    /// </returns>
+    bool TryFormat(ReadOnlySpan<byte> key, Span<byte> destination, out int bytesWritten);
 }
 
 public static class KeyEncoding
@@ -142,6 +150,28 @@ public sealed class Int64LittleEndianEncoding : IKeyEncoding
         var nb = Unsafe.ReadUnaligned<long>(ref MemoryMarshal.GetReference(b.Span));
         return (na > nb ? 1 : 0) - (na < nb ? 1 : 0);
     }
+
+    public bool TryFormat(ReadOnlySpan<byte> key, Span<byte> destination, out int bytesWritten)
+    {
+        if (key.Length < sizeof(long))
+        {
+            bytesWritten = 0;
+            return false;
+        }
+        var value = Unsafe.ReadUnaligned<long>(ref MemoryMarshal.GetReference(key));
+#if NET8_0_OR_GREATER
+        return value.TryFormat(destination, out bytesWritten);
+#else
+        var str = value.ToString();
+        if (destination.Length < str.Length)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+        bytesWritten = Encoding.UTF8.GetBytes(str, destination);
+        return true;
+#endif
+    }
 }
 
 public sealed class AsciiOrdinalEncoding : IKeyEncoding
@@ -210,6 +240,18 @@ public sealed class AsciiOrdinalEncoding : IKeyEncoding
         }
 #endif
     }
+
+    public bool TryFormat(ReadOnlySpan<byte> key, Span<byte> destination, out int bytesWritten)
+    {
+        if (destination.Length < key.Length)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+        key.CopyTo(destination);
+        bytesWritten = key.Length;
+        return true;
+    }
 }
 
 #if NET9_0_OR_GREATER
@@ -258,6 +300,17 @@ public sealed class Uuidv7KeyEncoding : IKeyEncoding
             return guid.TryWriteBytes(destination);
         }
         throw new KeyEncodingMismatchException($"Cannot convert to uuidv7: {formattedString}");
+    }
+
+    public bool TryFormat(ReadOnlySpan<byte> key, Span<byte> destination, out int bytesWritten)
+    {
+        if (key.Length < 16)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+        var guid = new Guid(key);
+        return guid.TryFormat(destination, out bytesWritten, "D");
     }
 }
 #endif
