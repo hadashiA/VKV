@@ -119,7 +119,7 @@ public class TableBuilder
         keyValues.Add(key, value);
     }
 
-    public async ValueTask BuildAsync(Stream stream, CancellationToken cancellationToken = default)
+    public async ValueTask<long[]> BuildDescriptorsAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         var nameUtf8 = Encoding.UTF8.GetBytes(name);
         var buffer = ArrayPool<byte>.Shared.Rent(sizeof(int) + nameUtf8.Length);
@@ -134,11 +134,12 @@ public class TableBuilder
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        var descriptorEndPositions = new List<long>();
+        var indexDescriptorWriteCount = 0;
+        var indexDescriptorEndPositions = new long[SecondaryIndexOptions.Count + 1];
 
         // build primary index descriptor
         await WriteIndexDescriptorAsync(stream, GetPrimaryKeyIndexOptions(), cancellationToken);
-        descriptorEndPositions.Add(stream.Position);
+        indexDescriptorEndPositions[indexDescriptorWriteCount++] = stream.Position;
 
         // build secondary index length
         Span<byte> indexCountBuffer = stackalloc byte[sizeof(ushort)];
@@ -149,9 +150,16 @@ public class TableBuilder
         foreach (var indexOptions in SecondaryIndexOptions)
         {
             await WriteIndexDescriptorAsync(stream, indexOptions, cancellationToken);
-            descriptorEndPositions.Add(stream.Position);
+            indexDescriptorEndPositions[indexDescriptorWriteCount++]  = stream.Position;
         }
+        return indexDescriptorEndPositions;
+    }
 
+    public async ValueTask BuildTreesAsync(
+        Stream stream,
+        long[] indexDescriptorEndPositions,
+        CancellationToken cancellationToken = default)
+    {
         // write primary tree
         var primaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
 
@@ -159,7 +167,7 @@ public class TableBuilder
         Span<byte> positionBuffer = stackalloc byte[sizeof(long)];
         BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, primaryKeyResult.RootPageNumber.Value);
         var currentPosition = stream.Position;
-        stream.Seek(descriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
+        stream.Seek(indexDescriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
         stream.Write(positionBuffer);
         stream.Seek(currentPosition, SeekOrigin.Begin);
 
@@ -185,7 +193,7 @@ public class TableBuilder
             BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, secondaryKeyResult.RootPageNumber.Value);
 
             var currentPosition2 = stream.Position;
-            stream.Seek(descriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
+            stream.Seek(indexDescriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
             stream.Write(positionBuffer2);
             stream.Seek(currentPosition2, SeekOrigin.Begin);
         }
@@ -311,10 +319,21 @@ public class DatabaseBuilder : IDisposable
             }
         }
 
+        var indexDescriptorEndPositionsList = new List<long[]>();
         foreach (var tableBuilder in tableBuilders)
         {
-            await tableBuilder.BuildAsync(stream, cancellationToken);
+            var positions = await tableBuilder.BuildDescriptorsAsync(stream, cancellationToken);
+            indexDescriptorEndPositionsList.Add(positions);
         }
+
+        for (var i = 0; i < tableBuilders.Count; i++)
+        {
+            await tableBuilders[i].BuildTreesAsync(
+                stream,
+                indexDescriptorEndPositionsList[i],
+                cancellationToken);
+        }
+
         await stream.FlushAsync(cancellationToken);
     }
 
