@@ -12,21 +12,37 @@ using (var builder = new DatabaseBuilder
            PageSize = 4096
        })
 {
-    var tableBuilder = builder
-        .CreateTable("items", KeyEncoding.Ascii);
+    var tableBuilder = builder.CreateTable("table1", KeyEncoding.Ascii);
     for (var i = 0; i < 1000; i++)
     {
         tableBuilder.Append($"key{i:D4}", Encoding.UTF8.GetBytes($"value{i:D4}"));
     }
+
+    var tableBuilder2 = builder.CreateTable("table2", KeyEncoding.Int64LittleEndian);
+    for (var i = 0; i < 1000; i++)
+    {
+        tableBuilder2.Append(i, Encoding.UTF8.GetBytes($"value{i:D4}"));
+    }
+
+    var tableBuilder3 = builder.CreateTable("table3", KeyEncoding.Uuidv7);
+    for (var i = 0; i < 1000; i++)
+    {
+        tableBuilder3.Append(Guid.CreateVersion7(), Encoding.UTF8.GetBytes($"value{i:D4}"));
+    }
+
+
     await builder.BuildToFileAsync(filePath);
     // var memoryStream = new MemoryStream();
     // await builder.SaveToStreamAsync(memoryStream);
     Console.WriteLine(filePath);
 }
 
-using (var database = await ReadOnlyDatabase.OpenFileAsync(filePath))
+var bytes = File.ReadAllBytes(filePath);
+
+//using (var database = await ReadOnlyDatabase.OpenFileAsync(filePath))
+using (var database = await ReadOnlyDatabase.OpenAsync(new MemoryStream(bytes)))
 {
-    var table = database.GetTable("items");
+    var table = database.GetTable("table2");
 
     while (true)
     {

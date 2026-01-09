@@ -46,15 +46,23 @@ public static class KeyEncoding
 
     public static IKeyEncoding FromId(string id)
     {
-        return id switch
+        switch (id)
         {
-            "i64" => Int64LittleEndianEncoding.Instance,
-            "ascii" => AsciiOrdinalEncoding.Instance,
+            case "i64":
+                return Int64LittleEndianEncoding.Instance;
+            case "ascii":
+                return AsciiOrdinalEncoding.Instance;
 #if NET9_0_OR_GREATER
-            "uuidv7" => Uuidv7KeyEncoding.Instance,
+            case "uuidv7":
+                return Uuidv7KeyEncoding.Instance;
 #endif
-            _ => registry[id]
-        };
+            default:
+                if (registry.TryGetValue(id, out var encoding))
+                {
+                    return encoding;
+                }
+                throw new InvalidOperationException($"Unknown encoding id: `{id}`");
+        }
     }
 
     public static void Register(IKeyEncoding customEncoding)
