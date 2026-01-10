@@ -54,26 +54,26 @@ public class FilterOptions
     }
 }
 
+public class TableOptions
+{
+    public required string Name { get; set; }
+    public required PrimaryKeyIndexOptions PrimaryKeyIndexOptions { get; set; }
+    public List<SecondaryIndexOptions> SecondaryIndexOptionsList { get; set; } = [];
+}
+
 public class TableBuilder
 {
-    readonly string name;
-    readonly int pageSize;
+    public string Name { get; set; }
     public IKeyEncoding PrimaryKeyEncoding { get; set; }
     public IReadOnlyList<SecondaryIndexOptions> SecondaryIndexOptions => secondaryIndexOptions;
+    internal KeyValueList KeyValues => keyValues;
 
     readonly List<SecondaryIndexOptions> secondaryIndexOptions = [];
     readonly KeyValueList keyValues;
-    readonly IReadOnlyList<IPageFilter>? pageFilters;
 
-    internal TableBuilder(
-        string name,
-        IKeyEncoding primaryKeyEncoding,
-        int pageSize,
-        IReadOnlyList<IPageFilter>? pageFilters)
+    internal TableBuilder(string name, IKeyEncoding primaryKeyEncoding)
     {
-        this.name = name;
-        this.pageSize = pageSize;
-        this.pageFilters = pageFilters;
+        Name = name;
         PrimaryKeyEncoding = primaryKeyEncoding;
         keyValues = KeyValueList.Create(PrimaryKeyEncoding, true);
     }
@@ -119,134 +119,16 @@ public class TableBuilder
         keyValues.Add(key, value);
     }
 
-    public async ValueTask<long[]> BuildDescriptorsAsync(Stream stream, CancellationToken cancellationToken = default)
+    public TableOptions ToTableOptions()
     {
-        var nameUtf8 = Encoding.UTF8.GetBytes(name);
-        var buffer = ArrayPool<byte>.Shared.Rent(sizeof(int) + nameUtf8.Length);
-        try
+        return new TableOptions
         {
-            BinaryPrimitives.WriteInt32LittleEndian(buffer, nameUtf8.Length);
-            nameUtf8.CopyTo(buffer.AsSpan(sizeof(int)));
-            await stream.WriteAsync(buffer.AsMemory(0, sizeof(int) + nameUtf8.Length), cancellationToken);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-
-        var indexDescriptorWriteCount = 0;
-        var indexDescriptorEndPositions = new long[SecondaryIndexOptions.Count + 1];
-
-        // build primary index descriptor
-        await WriteIndexDescriptorAsync(stream, GetPrimaryKeyIndexOptions(), cancellationToken);
-        indexDescriptorEndPositions[indexDescriptorWriteCount++] = stream.Position;
-
-        // build secondary index length
-        Span<byte> indexCountBuffer = stackalloc byte[sizeof(ushort)];
-        BinaryPrimitives.WriteUInt16LittleEndian(indexCountBuffer, (ushort)SecondaryIndexOptions.Count);
-        stream.Write(indexCountBuffer);
-
-        // build secondary index descriptors
-        foreach (var indexOptions in SecondaryIndexOptions)
-        {
-            await WriteIndexDescriptorAsync(stream, indexOptions, cancellationToken);
-            indexDescriptorEndPositions[indexDescriptorWriteCount++]  = stream.Position;
-        }
-        return indexDescriptorEndPositions;
-    }
-
-    public async ValueTask BuildTreesAsync(
-        Stream stream,
-        long[] indexDescriptorEndPositions,
-        CancellationToken cancellationToken = default)
-    {
-        // write primary tree
-        var primaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, keyValues, pageFilters, cancellationToken);
-
-        // write primary tree root position
-        Span<byte> positionBuffer = stackalloc byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(positionBuffer, primaryKeyResult.RootPageNumber.Value);
-        var currentPosition = stream.Position;
-        stream.Seek(indexDescriptorEndPositions[0] - sizeof(long), SeekOrigin.Begin);
-        stream.Write(positionBuffer);
-        stream.Seek(currentPosition, SeekOrigin.Begin);
-
-        // write secondary tree root positions
-        for (var i = 0; i < SecondaryIndexOptions.Count; i++)
-        {
-            var indexOptions = SecondaryIndexOptions[i];
-            var secondaryKeyValues = KeyValueList.Create(indexOptions.KeyEncoding, indexOptions.IsUnique);
-            var primaryKeyIndex = 0;
-            foreach (var (primaryKey, value) in keyValues)
+            Name = Name,
+            PrimaryKeyIndexOptions = new PrimaryKeyIndexOptions($"{Name}_pk")
             {
-                var secondaryKey = indexOptions.IndexFactory.Invoke(primaryKey, value);
-                var valuePointer = primaryKeyResult.WroteValueRefs[primaryKeyIndex];
-                secondaryKeyValues.Add(secondaryKey, valuePointer.Encode());
-                primaryKeyIndex++;
-            }
-
-            // write secondary key tree
-            var secondaryKeyResult = await TreeBuilder.BuildToAsync(stream, pageSize, secondaryKeyValues, pageFilters, cancellationToken);
-
-            // write secondary tree root position
-            Span<byte> positionBuffer2 = stackalloc byte[sizeof(long)];
-            BinaryPrimitives.WriteInt64LittleEndian(positionBuffer2, secondaryKeyResult.RootPageNumber.Value);
-
-            var currentPosition2 = stream.Position;
-            stream.Seek(indexDescriptorEndPositions[i + 1] - sizeof(long), SeekOrigin.Begin);
-            stream.Write(positionBuffer2);
-            stream.Seek(currentPosition2, SeekOrigin.Begin);
-        }
-    }
-
-    async ValueTask WriteIndexDescriptorAsync(
-        Stream stream,
-        IndexOptions indexOptions,
-        CancellationToken cancellationToken = default)
-    {
-        var indexNameUtf8 = Encoding.UTF8.GetBytes(indexOptions.Name);
-        var keyEncodingIdUtf8 = Encoding.UTF8.GetBytes(indexOptions.KeyEncoding.Id);
-        var descriptorLength = sizeof(ushort) * 2 + indexNameUtf8.Length + keyEncodingIdUtf8.Length + 1 + 1 + sizeof(long);
-
-        var buffer = ArrayPool<byte>.Shared.Rent(descriptorLength);
-
-        ref var bufferRef = ref GetArrayDataReference(buffer);
-
-        Unsafe.WriteUnaligned(ref bufferRef, (ushort)indexNameUtf8.Length);
-        bufferRef = ref Unsafe.Add(ref bufferRef, sizeof(ushort));
-
-        Unsafe.WriteUnaligned(ref bufferRef, (ushort)keyEncodingIdUtf8.Length);
-        bufferRef = ref Unsafe.Add(ref bufferRef, sizeof(ushort));
-
-        Unsafe.CopyBlock(
-            ref bufferRef,
-            ref GetArrayDataReference(indexNameUtf8),
-            (uint)indexNameUtf8.Length);
-        bufferRef = ref Unsafe.Add(ref bufferRef, indexNameUtf8.Length);
-
-        Unsafe.CopyBlock(
-            ref bufferRef,
-            ref GetArrayDataReference(keyEncodingIdUtf8),
-            (uint)keyEncodingIdUtf8.Length);
-        bufferRef = ref Unsafe.Add(ref bufferRef, keyEncodingIdUtf8.Length);
-
-        bufferRef = (byte)(indexOptions.IsUnique ? 1 : 0);
-        bufferRef = ref Unsafe.Add(ref bufferRef, 1);
-
-        bufferRef = (byte)indexOptions.ValueKind;
-        bufferRef = ref Unsafe.Add(ref bufferRef, 1);
-
-        var payloadPosition = stream.Position + descriptorLength;
-        Unsafe.WriteUnaligned(ref bufferRef, payloadPosition);
-
-        await stream.WriteAsync(buffer.AsMemory(0, descriptorLength), cancellationToken);
-    }
-
-    PrimaryKeyIndexOptions GetPrimaryKeyIndexOptions()
-    {
-        return new PrimaryKeyIndexOptions($"{name}_pk")
-        {
-            KeyEncoding = PrimaryKeyEncoding,
+                KeyEncoding = PrimaryKeyEncoding,
+            },
+            SecondaryIndexOptionsList = secondaryIndexOptions
         };
     }
 }
@@ -272,7 +154,7 @@ public class DatabaseBuilder : IDisposable
 
     public TableBuilder CreateTable(string name, IKeyEncoding primaryKeyEncoding)
     {
-        var tableBuilder = new TableBuilder(name, primaryKeyEncoding, PageSize, filterOptions?.Filters);
+        var tableBuilder = new TableBuilder(name, primaryKeyEncoding);
         tableBuilders.Add(tableBuilder);
         return tableBuilder;
     }
@@ -297,39 +179,33 @@ public class DatabaseBuilder : IDisposable
         header.PageSize = PageSize;
         header.TableCount = (ushort)tableBuilders.Count;
 
-        Span<byte> headerBytes = stackalloc byte[Unsafe.SizeOf<Header>()];
-        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(headerBytes), header);
-        stream.Write(headerBytes);
+        await VKVCodec.WriteDatabaseHeaderAsync(stream, header, filterOptions, cancellationToken);
 
-        // write filter ids
-        if (filterOptions?.Filters is { Count: > 0 } filters)
+        var tableOptions = new TableOptions[tableBuilders.Count];
+        var indexDescriptorEndPositionsList = new List<long[]>();
+
+        for (var i = 0; i < tableBuilders.Count; i++)
         {
-            Span<byte> filterIdBuffer = stackalloc byte[byte.MaxValue + 1];
-            for (var i = 0; i < filters.Count; i++)
-            {
-                var filter = filters[i];
-                var filterIdBytes = Encoding.UTF8.GetByteCount(filter.Id);
-                if (filterIdBytes > byte.MaxValue)
-                {
-                    throw new InvalidOperationException($"Filter ID length must be less than 255: `{filter.Id}` ");
-                }
-                var bytesWritten = Encoding.UTF8.GetBytes(filter.Id,  filterIdBuffer[1..]);
-                filterIdBuffer[0] = (byte)bytesWritten;
-                stream.Write(filterIdBuffer[..(bytesWritten + 1)]);
-            }
+            tableOptions[i] = tableBuilders[i].ToTableOptions();
         }
 
-        var indexDescriptorEndPositionsList = new List<long[]>();
-        foreach (var tableBuilder in tableBuilders)
+        for (var i = 0; i < tableBuilders.Count; i++)
         {
-            var positions = await tableBuilder.BuildDescriptorsAsync(stream, cancellationToken);
+            var positions = await VKVCodec.WriteTableDescriptorAsync(
+                stream,
+                tableOptions[i],
+                cancellationToken);
             indexDescriptorEndPositionsList.Add(positions);
         }
 
         for (var i = 0; i < tableBuilders.Count; i++)
         {
-            await tableBuilders[i].BuildTreesAsync(
+            await VKVCodec.BuildTreeAsync(
                 stream,
+                PageSize,
+                tableOptions[i],
+                tableBuilders[i].KeyValues,
+                filterOptions?.Filters,
                 indexDescriptorEndPositionsList[i],
                 cancellationToken);
         }
