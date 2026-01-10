@@ -87,10 +87,8 @@ public struct PageHeader
 
 public class StorageFormatException(string message) : Exception(message);
 
-static class VKVCodec
+static partial class VKVCodec
 {
-    // TODO: Integrate the builder into this class.
-
     public static async ValueTask<Catalog> ParseCatalogAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         Header header;
