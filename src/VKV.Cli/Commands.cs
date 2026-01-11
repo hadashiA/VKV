@@ -183,9 +183,9 @@ public class Commands
         table.Border = TableBorder.Rounded;
 
         table.AddRow("[green]get[/] <key>", "Get value by key");
-        table.AddRow("[green]scan[/] [limit] [offset]", "Scan key-value entries (default: limit=10, offset=0)");
-        table.AddRow("[green]keys[/] [limit] [offset]", "Scan keys only");
-        table.AddRow("[green]values[/] [limit] [offset]", "Scan values only");
+        table.AddRow("[green]scan[/] [[limit]] [[offset]]", "Scan key-value entries (default: limit=10, offset=0)");
+        table.AddRow("[green]keys[/] [[limit]] [[offset]]", "Scan keys only");
+        table.AddRow("[green]values[/] [[limit]] [[offset]]", "Scan values only");
         table.AddRow("[green]count[/]", "Count all entries");
         table.AddRow("[green]tables[/]", "List all tables");
         table.AddRow("[green]use[/] <table>", "Switch to another table");
