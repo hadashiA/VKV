@@ -41,8 +41,6 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
   - By manipulating the cursor, large areas can be accessed sequentially.
 - TODO
   - Read values by key prefix
-  - Multiple table JOINs
-  - Cli tools
 
 ## Why read-only ?
 
@@ -55,7 +53,7 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
 | VKV             | Main package. Embedded key/value store implementation. | [![NuGet](https://img.shields.io/nuget/v/VKV)](https://www.nuget.org/packages/VKV)                         |
 | VKV.MessagePack | Plugin that handles value as MessagePack-Csharp.       | [![NuGet](https://img.shields.io/nuget/v/VKV.MessagePack)](https://www.nuget.org/packages/VKV.MessagePack) |
 | VKV.Compression | Plugin  for compressing binary data.                    | [![NuGet](https://img.shields.io/nuget/v/VKV.Compression)](https://www.nuget.org/packages/VKV.Compression) | 
-| VKV.Ulid        | Plugin enabling the use of ulid as a key               | [![NuGet](https://img.shields.io/nuget/v/VKV.Ulid)](https://www.nuget.org/packages/VKV.Ulid) | 
+| VKV.UlidKey     | Plugin enabling the use of ulid as a key               | [![NuGet](https://img.shields.io/nuget/v/VKV.UlidKey)](https://www.nuget.org/packages/VKV.UlidKey) | 
 
 ### Unity
 
