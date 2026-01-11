@@ -70,7 +70,7 @@ public class Commands
         await using var prompt = new Prompt(
             configuration: new PromptConfiguration(
                 prompt: new FormattedString($"{fileName}({currentTableName})> ",
-                    new FormatSpan(0, file.Length, AnsiColor.Blue)),
+                    new FormatSpan(0, fileName.Length, AnsiColor.Blue)),
                 keyBindings: keyBindings,
                 completionItemDescriptionPaneBackground: AnsiColor.Rgb(30, 30, 30),
                 selectedCompletionItemBackground: AnsiColor.Rgb(30, 30, 30),
