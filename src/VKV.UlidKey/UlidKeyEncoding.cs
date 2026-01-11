@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace VKV.UlidKey;
 
@@ -49,5 +49,22 @@ public class UlidKeyEncoding : IKeyEncoding
             return ulid.TryWriteBytes(destination);
         }
         throw new KeyEncodingMismatchException($"Cannot parse Ulid: {formattedString}");
+    }
+
+    public bool TryFormat(ReadOnlySpan<byte> key, Span<byte> destination, out int bytesWritten)
+    {
+        if (key.Length < 16 || destination.Length < 26)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+        var ulid = new Ulid(key);
+        if (ulid.TryWriteStringify(destination))
+        {
+            bytesWritten = 26;
+            return true;
+        }
+        bytesWritten = 0;
+        return false;
     }
 }

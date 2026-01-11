@@ -70,7 +70,7 @@ public class Commands
         await using var prompt = new Prompt(
             configuration: new PromptConfiguration(
                 prompt: new FormattedString($"{fileName}({currentTableName})> ",
-                    new FormatSpan(0, file.Length, AnsiColor.Blue)),
+                    new FormatSpan(0, fileName.Length, AnsiColor.Blue)),
                 keyBindings: keyBindings,
                 completionItemDescriptionPaneBackground: AnsiColor.Rgb(30, 30, 30),
                 selectedCompletionItemBackground: AnsiColor.Rgb(30, 30, 30),
@@ -156,6 +156,14 @@ public class Commands
                 await ExecuteScan(table, args);
                 break;
 
+            case "keys":
+                await ExecuteKeys(table, args);
+                break;
+
+            case "values":
+                await ExecuteValues(table, args);
+                break;
+
             case "count":
                 ExecuteCount(table);
                 break;
@@ -175,7 +183,9 @@ public class Commands
         table.Border = TableBorder.Rounded;
 
         table.AddRow("[green]get[/] <key>", "Get value by key");
-        table.AddRow("[green]scan[/] <count>", "Scan entries (default: 10)");
+        table.AddRow("[green]scan[/] [limit] [offset]", "Scan key-value entries (default: limit=10, offset=0)");
+        table.AddRow("[green]keys[/] [limit] [offset]", "Scan keys only");
+        table.AddRow("[green]values[/] [limit] [offset]", "Scan values only");
         table.AddRow("[green]count[/]", "Count all entries");
         table.AddRow("[green]tables[/]", "List all tables");
         table.AddRow("[green]use[/] <table>", "Switch to another table");
@@ -274,25 +284,49 @@ public class Commands
 
     static async Task ExecuteScan(ReadOnlyTable table, string[] args)
     {
-        var count = 10;
-        if (args.Length > 0 && int.TryParse(args[0], out var parsed))
+        var limit = 10;
+        var offset = 0;
+
+        if (args.Length > 0 && int.TryParse(args[0], out var parsedLimit))
         {
-            count = parsed;
+            limit = parsedLimit;
+        }
+        if (args.Length > 1 && int.TryParse(args[1], out var parsedOffset))
+        {
+            offset = parsedOffset;
         }
 
         var iterator = table.CreateIterator();
+        var skipped = 0;
         var displayed = 0;
 
-        while (await iterator.MoveNextAsync() && displayed < count)
+        while (await iterator.MoveNextAsync())
         {
-            var value = iterator.Current;
+            if (skipped < offset)
+            {
+                skipped++;
+                continue;
+            }
+
+            if (displayed >= limit)
+            {
+                break;
+            }
+
+            var key = iterator.CurrentKey;
+            var value = iterator.CurrentValue;
+
+            var keyStr = TryDecodeKey(key.Span, table.KeyEncoding);
+            var keyDisplay = keyStr != null
+                ? EscapeMarkup(Truncate(keyStr, 40))
+                : $"(binary, {key.Length} bytes)";
 
             var valueStr = TryDecodeValue(value.Span);
             var valueDisplay = valueStr != null
-                ? EscapeMarkup(Truncate(valueStr, 80))
+                ? EscapeMarkup(Truncate(valueStr, 60))
                 : $"(binary, {value.Length} bytes)";
 
-            AnsiConsole.MarkupLine($"[dim]{displayed + 1})[/] [green]{valueDisplay}[/]");
+            AnsiConsole.MarkupLine($"[dim]{offset + displayed + 1})[/] [blue]{keyDisplay}[/] -> [green]{valueDisplay}[/]");
             displayed++;
         }
 
@@ -302,7 +336,109 @@ public class Commands
         }
         else
         {
-            AnsiConsole.MarkupLine($"[dim]Displayed {displayed} entries[/]");
+            AnsiConsole.MarkupLine($"[dim]Displayed {displayed} entries (offset: {offset})[/]");
+        }
+    }
+
+    static async Task ExecuteKeys(ReadOnlyTable table, string[] args)
+    {
+        var limit = 10;
+        var offset = 0;
+
+        if (args.Length > 0 && int.TryParse(args[0], out var parsedLimit))
+        {
+            limit = parsedLimit;
+        }
+        if (args.Length > 1 && int.TryParse(args[1], out var parsedOffset))
+        {
+            offset = parsedOffset;
+        }
+
+        var iterator = table.CreateIterator();
+        var skipped = 0;
+        var displayed = 0;
+
+        while (await iterator.MoveNextAsync())
+        {
+            if (skipped < offset)
+            {
+                skipped++;
+                continue;
+            }
+
+            if (displayed >= limit)
+            {
+                break;
+            }
+
+            var key = iterator.CurrentKey;
+            var keyStr = TryDecodeKey(key.Span, table.KeyEncoding);
+            var keyDisplay = keyStr != null
+                ? EscapeMarkup(keyStr)
+                : $"(binary, {key.Length} bytes)";
+
+            AnsiConsole.MarkupLine($"[dim]{offset + displayed + 1})[/] [blue]{keyDisplay}[/]");
+            displayed++;
+        }
+
+        if (displayed == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow](empty)[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[dim]Displayed {displayed} keys (offset: {offset})[/]");
+        }
+    }
+
+    static async Task ExecuteValues(ReadOnlyTable table, string[] args)
+    {
+        var limit = 10;
+        var offset = 0;
+
+        if (args.Length > 0 && int.TryParse(args[0], out var parsedLimit))
+        {
+            limit = parsedLimit;
+        }
+        if (args.Length > 1 && int.TryParse(args[1], out var parsedOffset))
+        {
+            offset = parsedOffset;
+        }
+
+        var iterator = table.CreateIterator();
+        var skipped = 0;
+        var displayed = 0;
+
+        while (await iterator.MoveNextAsync())
+        {
+            if (skipped < offset)
+            {
+                skipped++;
+                continue;
+            }
+
+            if (displayed >= limit)
+            {
+                break;
+            }
+
+            var value = iterator.CurrentValue;
+            var valueStr = TryDecodeValue(value.Span);
+            var valueDisplay = valueStr != null
+                ? EscapeMarkup(valueStr)
+                : $"(binary, {value.Length} bytes)";
+
+            AnsiConsole.MarkupLine($"[dim]{offset + displayed + 1})[/] [green]{valueDisplay}[/]");
+            displayed++;
+        }
+
+        if (displayed == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow](empty)[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[dim]Displayed {displayed} values (offset: {offset})[/]");
         }
     }
 
@@ -366,6 +502,16 @@ public class Commands
         }
 
         return parts.ToArray();
+    }
+
+    static string? TryDecodeKey(ReadOnlySpan<byte> bytes, IKeyEncoding keyEncoding)
+    {
+        Span<byte> buffer = stackalloc byte[256];
+        if (keyEncoding.TryFormat(bytes, buffer, out var bytesWritten))
+        {
+            return Encoding.UTF8.GetString(buffer[..bytesWritten]);
+        }
+        return TryDecodeAsUtf8(bytes);
     }
 
     static string? TryDecodeValue(ReadOnlySpan<byte> bytes)
