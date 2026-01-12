@@ -16,9 +16,8 @@ public class Commands
     /// </summary>
     /// <param name="file">Path to the .vkv file</param>
     /// <param name="table">-t, Table name to use (optional, uses first table if not specified)</param>
-    /// <param name="command"></param>
     [Command("")]
-    public async Task Interactive(string file, string? table = null, [Argument] params string[] command)
+    public async Task Interactive([Argument] string file, string? table = null)
     {
         if (!File.Exists(file))
         {
@@ -46,13 +45,6 @@ public class Commands
         }
 
         var currentTable = db.GetTable(currentTableName);
-
-        // One-shot command mode
-        if (command.Length > 0)
-        {
-            await ExecuteCommand(db, currentTable, command[0], command.Skip(1).ToArray());
-            return;
-        }
 
         // Interactive mode
         AnsiConsole.MarkupLine($"[green]Connected to[/] [yellow]{fileName}[/]");
@@ -183,9 +175,9 @@ public class Commands
         table.Border = TableBorder.Rounded;
 
         table.AddRow("[green]get[/] <key>", "Get value by key");
-        table.AddRow("[green]scan[/] [[offset]] [[limit]]", "Scan key-value entries (default: offset=0, limit=20)");
-        table.AddRow("[green]keys[/] [[offset]] [[limit]]", "Scan keys only");
-        table.AddRow("[green]values[/] [[offset]] [[limit]]", "Scan values only");
+        table.AddRow("[green]scan[/] [[limit]] [[offset]]", "Scan key-value entries (default: limit=10, offset=0)");
+        table.AddRow("[green]keys[/] [[limit]] [[offset]]", "Scan keys only");
+        table.AddRow("[green]values[/] [[limit]] [[offset]]", "Scan values only");
         table.AddRow("[green]count[/]", "Count all entries");
         table.AddRow("[green]tables[/]", "List all tables");
         table.AddRow("[green]use[/] <table>", "Switch to another table");
@@ -284,16 +276,16 @@ public class Commands
 
     static async Task ExecuteScan(ReadOnlyTable table, string[] args)
     {
+        var limit = 10;
         var offset = 0;
-        var limit = 20;
 
-        if (args.Length > 0 && int.TryParse(args[0], out var parsedOffset))
-        {
-            offset = parsedOffset;
-        }
-        if (args.Length > 1 && int.TryParse(args[1], out var parsedLimit))
+        if (args.Length > 0 && int.TryParse(args[0], out var parsedLimit))
         {
             limit = parsedLimit;
+        }
+        if (args.Length > 1 && int.TryParse(args[1], out var parsedOffset))
+        {
+            offset = parsedOffset;
         }
 
         var iterator = table.CreateIterator();
@@ -342,16 +334,16 @@ public class Commands
 
     static async Task ExecuteKeys(ReadOnlyTable table, string[] args)
     {
+        var limit = 10;
         var offset = 0;
-        var limit = 20;
 
-        if (args.Length > 0 && int.TryParse(args[0], out var parsedOffset))
-        {
-            offset = parsedOffset;
-        }
-        if (args.Length > 1 && int.TryParse(args[1], out var parsedLimit))
+        if (args.Length > 0 && int.TryParse(args[0], out var parsedLimit))
         {
             limit = parsedLimit;
+        }
+        if (args.Length > 1 && int.TryParse(args[1], out var parsedOffset))
+        {
+            offset = parsedOffset;
         }
 
         var iterator = table.CreateIterator();
@@ -393,16 +385,16 @@ public class Commands
 
     static async Task ExecuteValues(ReadOnlyTable table, string[] args)
     {
+        var limit = 10;
         var offset = 0;
-        var limit = 20;
 
-        if (args.Length > 0 && int.TryParse(args[0], out var parsedOffset))
-        {
-            offset = parsedOffset;
-        }
-        if (args.Length > 1 && int.TryParse(args[1], out var parsedLimit))
+        if (args.Length > 0 && int.TryParse(args[0], out var parsedLimit))
         {
             limit = parsedLimit;
+        }
+        if (args.Length > 1 && int.TryParse(args[1], out var parsedOffset))
+        {
+            offset = parsedOffset;
         }
 
         var iterator = table.CreateIterator();
