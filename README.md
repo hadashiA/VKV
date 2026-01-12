@@ -39,6 +39,7 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
   - We can write custom filters in C#.
 - Iterator API
   - By manipulating the cursor, large areas can be accessed sequentially.
+- CLI tool
 - TODO
   - Read values by key prefix
 
@@ -66,6 +67,17 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
     - ```
       https://github.com/hadashiA/VKV.git?path=src/VKV.Unity/Assets/VKV#0.1.0-preview
       ```
+
+### Cli tool (optional)
+
+We distribute the CLI tool as a dotnet tool.
+
+```bash
+$ dotnet tool install vkv.cli --prerelease
+```
+
+See [CLI tool](#cli-tool) section for the usage.
+
 
 ## Usage
 
@@ -300,8 +312,40 @@ var database = await ReadOnlyDatabase.OpenFromFileAsync(filePath, new DatabaseLo
 {
     StorageFactory = UnityNativeAllocatorFileStorage.Factory,
 });
-
 ```
+
+### Cli tool
+
+```bash
+$ dotnet tool install vkv.cli --prerelease
+```
+
+After install, specify the DB file and start an interactive session.
+
+```bash
+$ dotnet vkv --file ./sample.vkv
+```
+
+<img src="./demo_cli.gif" alt="CLI Demo" width="50%" />
+
+
+During an interactive session, the following commands are available.
+
+| Command | Description |
+|---------|-------------|
+| get <key> | Get value by key |
+| scan [offset] [limit] | Scan key-value entries (default: offset=0, limit=20) |
+| keys [offset] [limit] | Scan keys only |
+| values [offset] [limit] | Scan values only |
+| count | Count all entries |
+| tables | List all tables |
+| use <table> | Switch to another table |
+| info | Show database info |
+| help | Show this help |
+| quit | Exit the session |
+
+
+
 
 ## Binary Format
 
