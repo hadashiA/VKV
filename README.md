@@ -17,12 +17,14 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
 - B+Tree based query
   - Read a value by primary key 
   - Read values by key range
+  - Read values by key prefix 
   - Count by key range
   - Secondary index
     - unique
     - non-unique
 - Multiple Tables
 - Support for both async and sync
+- Sort by asc/desc
 - C# Serialization
   - MessagePack
   - (Other formats are under planning.  
@@ -39,11 +41,8 @@ VKV is a read-only embedded B+Tree based key/value database, implemented pure C#
   - We can write custom filters in C#.
 - Iterator API
   - By manipulating the cursor, large areas can be accessed sequentially.
-- CLI tool
-- Read values by key prefix
-- TODO
+- CLI tool- TODO
   - Support more large blob (currentry 65536B is limit)
-  - Sort order
 
 ## Why read-only ?
 
