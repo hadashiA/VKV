@@ -419,4 +419,97 @@ public class ReadOnlyTableTest
             SortOrder.Ascending);
         Assert.That(result.Count, Is.EqualTo(11)); // 10, 11, ..., 20
     }
+
+    [Test]
+    public async Task GetRange_Descending_Between()
+    {
+        var table = await TestHelper.BuildTableAsync(
+            KeyEncoding.Ascii,
+            databaseConfigure: builder => builder.PageSize = 128,
+            tableConfigure: builder =>
+            {
+                for (var i = 0; i < 100; i++)
+                {
+                    builder.Append(
+                        Encoding.ASCII.GetBytes($"key{i:D3}"),
+                        Encoding.ASCII.GetBytes($"value{i:D3}"));
+                }
+            });
+
+        // key050 ~ key060 descending (inclusive)
+        using var ascResult = await table.GetRangeAsync(
+            "key050"u8.ToArray(),
+            "key060"u8.ToArray(),
+            sortOrder: SortOrder.Ascending);
+
+        using var descResult = await table.GetRangeAsync(
+            "key050"u8.ToArray(),
+            "key060"u8.ToArray(),
+            sortOrder: SortOrder.Descending);
+
+        Assert.That(descResult.Count, Is.EqualTo(11)); // 050..060
+        for (var i = 0; i < descResult.Count; i++)
+        {
+            Assert.That(
+                descResult[i].Span.SequenceEqual(ascResult[ascResult.Count - 1 - i].Span),
+                Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetRange_Descending_GreaterThan()
+    {
+        var table = await TestHelper.BuildTableAsync(
+            KeyEncoding.Ascii,
+            databaseConfigure: builder => builder.PageSize = 128,
+            tableConfigure: builder =>
+            {
+                for (var i = 0; i < 10; i++)
+                {
+                    builder.Append(
+                        Encoding.ASCII.GetBytes($"key{i:D2}"),
+                        Encoding.ASCII.GetBytes($"value{i:D2}"));
+                }
+            });
+
+        // > key07 descending => key09, key08
+        using var result = await table.GetRangeAsync(
+            "key07"u8.ToArray(),
+            KeyRange.Unbound,
+            startKeyExclusive: true,
+            endKeyExclusive: false,
+            SortOrder.Descending);
+        Assert.That(result.Count, Is.EqualTo(2));
+        Assert.That(result[0].Span.SequenceEqual("value09"u8), Is.True);
+        Assert.That(result[1].Span.SequenceEqual("value08"u8), Is.True);
+    }
+
+    [Test]
+    public async Task GetRange_Descending_LessThan()
+    {
+        var table = await TestHelper.BuildTableAsync(
+            KeyEncoding.Ascii,
+            databaseConfigure: builder => builder.PageSize = 128,
+            tableConfigure: builder =>
+            {
+                for (var i = 0; i < 10; i++)
+                {
+                    builder.Append(
+                        Encoding.ASCII.GetBytes($"key{i:D2}"),
+                        Encoding.ASCII.GetBytes($"value{i:D2}"));
+                }
+            });
+
+        // < key03 descending => key02, key01, key00
+        using var result = await table.GetRangeAsync(
+            KeyRange.Unbound,
+            "key03"u8.ToArray(),
+            startKeyExclusive: false,
+            endKeyExclusive: true,
+            SortOrder.Descending);
+        Assert.That(result.Count, Is.EqualTo(3));
+        Assert.That(result[0].Span.SequenceEqual("value02"u8), Is.True);
+        Assert.That(result[1].Span.SequenceEqual("value01"u8), Is.True);
+        Assert.That(result[2].Span.SequenceEqual("value00"u8), Is.True);
+    }
 }

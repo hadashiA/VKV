@@ -56,6 +56,7 @@ public class RangeIterator :
 
     // iterator state
     readonly TreeWalker treeWalker;
+    readonly IteratorDirection direction;
     IPageEntry? currentPage;
     int currentEntryIndex;
 
@@ -64,10 +65,7 @@ public class RangeIterator :
         IteratorDirection iteratorDirection = IteratorDirection.Forward)
     {
         this.treeWalker = treeWalker;
-        if (iteratorDirection == IteratorDirection.Backward)
-        {
-            throw new NotImplementedException();
-        }
+        this.direction = iteratorDirection;
     }
 
     public RangeIterator GetEnumerator() => this;
@@ -149,6 +147,11 @@ public class RangeIterator :
 
     public bool MoveNext()
     {
+        return direction == IteratorDirection.Backward ? MoveNextBackward() : MoveNextForward();
+    }
+
+    bool MoveNextForward()
+    {
         var pageCache = treeWalker.PageCache;
 
         // first item
@@ -199,7 +202,66 @@ public class RangeIterator :
         return true;
     }
 
+    bool MoveNextBackward()
+    {
+        var pageCache = treeWalker.PageCache;
+
+        // first item
+        if (currentPage is null)
+        {
+            var maxLeaf = treeWalker.GetMaxValueLeaf();
+            if (!maxLeaf.HasValue)
+            {
+                return false;
+            }
+
+            currentPage = maxLeaf.Value.Page;
+            currentEntryIndex = maxLeaf.Value.EntryIndex;
+            return true;
+        }
+
+        // head of node
+        if (currentEntryIndex <= 0)
+        {
+            var header = currentPage.GetNodeHeader();
+            // check left node exists
+            if (header.LeftSiblingPageNumber.IsEmpty)
+            {
+                return false;
+            }
+
+            currentPage.Release();
+            while (!pageCache.TryGet(header.LeftSiblingPageNumber, out currentPage))
+            {
+                treeWalker.PageCache.Load(header.LeftSiblingPageNumber);
+            }
+
+            var leftHeader = currentPage.GetNodeHeader();
+            if (leftHeader.Kind != NodeKind.Leaf)
+            {
+                throw new InvalidOperationException("Invalid node kind");
+            }
+            currentEntryIndex = leftHeader.EntryCount - 1;
+            if (leftHeader.EntryCount <= 0)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            currentEntryIndex--;
+        }
+        return true;
+    }
+
     public async ValueTask<bool> MoveNextAsync()
+    {
+        return direction == IteratorDirection.Backward
+            ? await MoveNextBackwardAsync().ConfigureAwait(false)
+            : await MoveNextForwardAsync().ConfigureAwait(false);
+    }
+
+    async ValueTask<bool> MoveNextForwardAsync()
     {
         var pageCache = treeWalker.PageCache;
 
@@ -246,6 +308,58 @@ public class RangeIterator :
         else
         {
             currentEntryIndex++;
+        }
+        return true;
+    }
+
+    async ValueTask<bool> MoveNextBackwardAsync()
+    {
+        var pageCache = treeWalker.PageCache;
+
+        // first item
+        if (currentPage is null)
+        {
+            var maxLeaf = treeWalker.GetMaxValueLeaf();
+            if (!maxLeaf.HasValue)
+            {
+                return false;
+            }
+
+            currentPage = maxLeaf.Value.Page;
+            currentEntryIndex = maxLeaf.Value.EntryIndex;
+            return true;
+        }
+
+        // head of node
+        if (currentEntryIndex <= 0)
+        {
+            var header = currentPage.GetNodeHeader();
+            // check left node exists
+            if (header.LeftSiblingPageNumber.IsEmpty)
+            {
+                return false;
+            }
+
+            currentPage.Release();
+            while (!pageCache.TryGet(header.LeftSiblingPageNumber, out currentPage))
+            {
+                await treeWalker.PageCache.LoadAsync(header.LeftSiblingPageNumber);
+            }
+
+            var leftHeader = currentPage.GetNodeHeader();
+            if (leftHeader.Kind != NodeKind.Leaf)
+            {
+                throw new InvalidOperationException("Invalid node kind");
+            }
+            currentEntryIndex = leftHeader.EntryCount - 1;
+            if (leftHeader.EntryCount <= 0)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            currentEntryIndex--;
         }
         return true;
     }
