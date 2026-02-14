@@ -87,11 +87,17 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        if (sortOrder == SortOrder.Descending)
-        {
-            return GetRangeDescending(startKey, endKey, startKeyExclusive, endKeyExclusive);
-        }
+        return sortOrder == SortOrder.Descending
+            ? GetRangeDescending(startKey, endKey, startKeyExclusive, endKeyExclusive)
+            : GetRangeAscending(startKey, endKey, startKeyExclusive, endKeyExclusive);
+    }
 
+    RangeResult GetRangeAscending(
+        ReadOnlySpan<byte> startKey,
+        ReadOnlySpan<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive)
+    {
         int entryIndex;
         IPageEntry page;
 
@@ -250,7 +256,7 @@ class TreeWalker
         }
     }
 
-    public async ValueTask<RangeResult> GetRangeAsync(
+    public ValueTask<RangeResult> GetRangeAsync(
         ReadOnlyMemory<byte> startKey,
         ReadOnlyMemory<byte> endKey,
         bool startKeyExclusive = false,
@@ -260,11 +266,18 @@ class TreeWalker
     {
         ValidateRange(startKey, endKey);
 
-        if (sortOrder == SortOrder.Descending)
-        {
-            return await GetRangeDescendingAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken).ConfigureAwait(false);
-        }
+        return sortOrder == SortOrder.Descending
+            ? GetRangeDescendingAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken)
+            : GetRangeAscendingAsync(startKey, endKey, startKeyExclusive, endKeyExclusive, cancellationToken);
+    }
 
+    async ValueTask<RangeResult> GetRangeAscendingAsync(
+        ReadOnlyMemory<byte> startKey,
+        ReadOnlyMemory<byte> endKey,
+        bool startKeyExclusive,
+        bool endKeyExclusive,
+        CancellationToken cancellationToken)
+    {
         int entryIndex;
         IPageEntry page;
 
