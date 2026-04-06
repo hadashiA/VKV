@@ -1,7 +1,7 @@
 # DryDB
 
-> [!WARNING]
-> This project is work in progress 
+> [!NOTE]
+> This project was formerly known as **VKV** and has been renamed to **DryDB**.
 
 DryDB is a read-only embedded B+Tree based key/value database, implemented pure C#.
 
