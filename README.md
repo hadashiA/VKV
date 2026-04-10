@@ -341,7 +341,7 @@ During an interactive session, the following commands are available.
 | prefix \<key\> [limit] | Search by key prefix (default: limit=10) |
 | count | Count all entries |
 | tables | List all tables |
-| use <table> | Switch to another table |
+| use [table] | Switch to another table |
 | info | Show database info |
 | help | Show this help |
 | quit | Exit the session |
