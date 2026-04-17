@@ -332,37 +332,34 @@ $ dotnet drydb --file ./sample.drydb
 
 During an interactive session, the following commands are available.
 
-| Command | Description |
-|---------|-------------|
-| get <key> | Get value by key |
-| scan [offset] [limit] | Scan key-value entries (default: offset=0, limit=20) |
-| keys [offset] [limit] | Scan keys only |
+| Command                 | Description |
+|-------------------------|-------------|
+| get <key>               | Get value by key |
+| scan [offset] [limit]   | Scan key-value entries (default: offset=0, limit=20) |
+| keys [offset] [limit]   | Scan keys only |
 | values [offset] [limit] | Scan values only |
-| prefix \<key\> [limit] | Search by key prefix (default: limit=10) |
-| count | Count all entries |
-| tables | List all tables |
-| use [table] | Switch to another table |
-| info | Show database info |
-| help | Show this help |
-| quit | Exit the session |
-
-
-
+| prefix \<key\> [limit]  | Search by key prefix (default: limit=10) |
+| count                   | Count all entries |
+| tables                  | List all tables |
+| use [table]             | Switch to another table |
+| info                    | Show database info |
+| help                    | Show this help |
+| quit                    | Exit the session |
 
 ## Binary Format
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              .drydb File Format                               │
+│                             .drydb File Format                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                        Header (14 bytes)                              │  │
-│  ├───────────┬───────────┬───────────┬───────────────┬──────────────────┤  │
-│  │ MagicBytes│  Version  │FilterCount│   PageSize    │   TableCount     │  │
-│  │  "DRY\0"  │Major|Minor│  ushort   │     int       │     ushort       │  │
-│  │  4 bytes  │ 1b  | 1b  │  2 bytes  │    4 bytes    │     2 bytes      │  │
-│  └───────────┴───────────┴───────────┴───────────────┴──────────────────┘  │
+│  ├───────────┬───────────┬───────────┬───────────────┬───────────────────┤  │
+│  │ MagicBytes│  Version  │FilterCount│   PageSize    │    TableCount     │  │
+│  │  "DRY\0"  │Major|Minor│  ushort   │     int       │      ushort       │  │
+│  │  4 bytes  │ 1b  | 1b  │  2 bytes  │    4 bytes    │      2 bytes      │  │
+│  └───────────┴───────────┴───────────┴───────────────┴───────────────────┘  │
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
@@ -393,11 +390,11 @@ During an interactive session, the following commands are available.
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          Index Descriptor                                   │
-├───────────┬───────────┬──────────┬────────────┬────────┬────────┬──────────┤
-│NameLength│EncodingLen│   Name   │ EncodingId │IsUnique│ValueKnd│RootPosion│
-│  ushort  │  ushort   │  UTF-8   │   UTF-8    │  bool  │  enum  │   long   │
-│  2 bytes │  2 bytes  │ variable │  variable  │ 1 byte │ 1 byte │  8 bytes │
-└───────────┴───────────┴──────────┴────────────┴────────┴────────┴──────────┘
+├────────────┬─────────────┬──────────┬────────────┬──────────┬──────────┬────────────┤
+│ NameLength │ EncodingLen │   Name   │ EncodingId │ IsUnique │ ValueKnd │ RootPosion │
+│   ushort   │   ushort    │  UTF-8   │   UTF-8    │   bool   │   enum   │    long    │
+│  2 bytes   │  2 bytes    │ variable │  variable  │  1 byte  │  1 byte  │  8 bytes   │
+└────────────┴─────────────┴──────────┴────────────┴──────────┴──────────┴────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                             Page Structure                                  │
